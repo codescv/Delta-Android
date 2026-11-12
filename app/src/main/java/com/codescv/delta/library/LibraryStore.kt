@@ -2,6 +2,16 @@ package com.codescv.delta.library
 
 import com.codescv.delta.model.GameSystem
 import com.codescv.delta.saves.SaveFileManager
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
+import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -87,8 +97,12 @@ class LibraryStore(
         if (persistAfter) persist()
     }
 
-    /** Blocking rescan of `Documents/ROMs`; call from a background dispatcher. */
-    fun rescan(): List<RomEntry> {
+    private val scanLock = Any()
+
+    /** Blocking rescan of `Documents/ROMs`; call from a background dispatcher. Concurrent calls serialize. */
+    fun rescan(): List<RomEntry> = synchronized(scanLock) { rescanLocked() }
+
+    private fun rescanLocked(): List<RomEntry> {
         mutate(false) { it.copy(isScanning = true) }
         val previous = _state.value.entries.associateBy { it.id }
         val scanned = RomScanner.scan(listOf(romsDirectory), previous).map { e ->
@@ -110,7 +124,9 @@ class LibraryStore(
      * Imports a ROM or `.zip` from a stream (SAF document). Zip archives are extracted keeping
      * the inner ROM file name. Returns imported entries.
      */
-    fun import(input: InputStream, displayName: String): List<RomEntry> {
+    fun import(input: InputStream, displayName: String): List<RomEntry> = synchronized(scanLock) { importLocked(input, displayName) }
+
+    private fun importLocked(input: InputStream, displayName: String): List<RomEntry> {
         val name = File(displayName).name.ifBlank { "game" }
         val imported = if (name.endsWith(".zip", ignoreCase = true)) {
             ZipRomExtractor.extract(input, romsDirectory)
@@ -173,7 +189,62 @@ class LibraryStore(
 
     fun entry(id: String): RomEntry? = _state.value.entries.firstOrNull { it.id == id }
 
+    /** Whether `ROMs/<fileName>` already holds a file of [size] bytes (linked-folder sync). */
+    fun hasRomFile(fileName: String, size: Long): Boolean {
+        val f = File(romsDirectory, File(fileName).name)
+        return f.isFile && (size < 0 || f.length() == size)
+    }
+
+    // Cover artwork ----------------------------------------------------------------------------
+
+    /** Stores a user-picked cover (already normalized to PNG) and bumps [LibraryState.coverRevision]. */
+    fun storeCustomCover(png: ByteArray, rom: RomEntry): File {
+        val f = covers.store(png, rom)
+        bumpCovers()
+        return f
+    }
+
+    /** Removes the current cover (custom or downloaded) so the placeholder or a re-fetch shows. */
+    fun resetCover(rom: RomEntry) {
+        covers.removeCover(rom)
+        bumpCovers()
+    }
+
+    /**
+     * Downloads covers for [roms] (default: every entry) with at most [parallelism] requests in
+     * flight. Bumps [LibraryState.coverRevision] after every stored cover so artwork appears
+     * progressively. Returns the number of covers stored. Blocking network: runs on IO.
+     */
+    suspend fun fetchCovers(
+        roms: List<RomEntry> = _state.value.entries,
+        force: Boolean = false,
+        parallelism: Int = COVER_FETCH_PARALLELISM,
+    ): Int = coroutineScope {
+        val gate = Semaphore(parallelism.coerceAtLeast(1))
+        val stored = AtomicInteger(0)
+        roms.distinctBy { it.id }.map { rom ->
+            async(Dispatchers.IO) {
+                gate.withPermit {
+                    val hadCover = !force && covers.coverIfExists(rom) != null
+                    val file = runCatching { covers.fetchCoverIfNeeded(rom, force) }.getOrNull()
+                    // Only count downloads that changed the cover on disk.
+                    if (file != null && !hadCover) {
+                        stored.incrementAndGet()
+                        bumpCovers()
+                    }
+                }
+            }
+        }.awaitAll()
+        stored.get()
+    }
+
+    /** Launches [fetchCovers] on [scope] for entries that have no cover yet. */
+    fun fetchMissingCovers(scope: CoroutineScope, roms: List<RomEntry> = _state.value.entries): Job =
+        scope.launch { fetchCovers(roms.filter { covers.coverIfExists(it) == null }) }
+
     companion object {
+        const val COVER_FETCH_PARALLELISM = 4
+
         /** Delta's `LibraryStore.filter`. */
         fun filter(entries: List<RomEntry>, search: String, system: GameSystem?): List<RomEntry> {
             val query = search.trim().lowercase()
