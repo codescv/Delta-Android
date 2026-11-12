@@ -33,12 +33,8 @@ jobs:
       - name: Unit tests and debug build
         run: |
           chmod +x ./gradlew
-          ./gradlew testDebugUnitTest assembleDebug --no-daemon \
+          ./gradlew -PrequireHostJni=true testDebugUnitTest assembleDebug --no-daemon \
             -Dorg.gradle.jvmargs="-Xmx4g -XX:MaxMetaspaceSize=1g"
-
-      - name: Native host tests
-        if: hashFiles('tools/host_tests.sh') != ''
-        run: bash tools/host_tests.sh
 
       - name: Content gates
         run: bash tools/ci_gates.sh
