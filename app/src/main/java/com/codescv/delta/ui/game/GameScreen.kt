@@ -439,6 +439,7 @@ fun GameScreen(rom: RomEntry, resumeStateId: String?, navigator: DeltaNavigator)
                     held = ui.held,
                     fastForwardActive = ui.fastForwardActive,
                     fastForwardMultiplier = ui.fastForwardMultiplier,
+                    fastForwardHeld = ui.fastForwardHeld,
                 )
                 is ActiveSkin.None -> Unit
             }
