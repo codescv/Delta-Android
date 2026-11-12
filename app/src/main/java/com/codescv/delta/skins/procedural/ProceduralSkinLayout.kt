@@ -17,6 +17,7 @@ import com.codescv.delta.skins.ProceduralLayout
  * - Portrait: painted console shell; game at the top inside the bezel, controls below.
  * - Landscape: game aspect-fit full height, translucent controls over the sides.
  * - NDS: touches on the game rect that aren't on a control drive the touch screen pointer.
+ *   With [reverseScreens] the bottom (touch) screen is shown on top and the pointer follows it.
  */
 class ProceduralSkinLayout(
     val skin: ProceduralSkin,
@@ -32,6 +33,11 @@ class ProceduralSkinLayout(
     val controls: ConsoleControlsLayout,
     /** Region the controls were laid out in, in points. */
     val controlsRegion: Box,
+    /** Core video size in pixels (NDS: both screens stacked). */
+    val sourceWidth: Float = 0f,
+    val sourceHeight: Float = 0f,
+    /** NDS: show the bottom screen on top (Delta "reverse screens"). */
+    val reverseScreens: Boolean = false,
 ) : ProceduralLayout {
     val portrait: Boolean get() = viewport.portrait
 
@@ -46,6 +52,22 @@ class ProceduralSkinLayout(
         listOf(Box(gameRect.x, gameRect.y, gameRect.width, half), Box(gameRect.x, gameRect.y + half, gameRect.width, half))
     } else {
         listOf(gameRect)
+    }
+
+    /**
+     * Core-pixel source rect shown in each of [screens] (same order). NDS: top / bottom half of
+     * the stacked output, swapped when [reverseScreens]; other systems: the whole frame.
+     */
+    val screenSources: List<Box> = run {
+        val sw = if (sourceWidth > 0f) sourceWidth else if (system == GameSystem.NDS) 256f else 1f
+        val sh = if (sourceHeight > 0f) sourceHeight else if (system == GameSystem.NDS) 384f else 1f
+        if (system == GameSystem.NDS) {
+            val top = Box(0f, 0f, sw, sh / 2f)
+            val bottom = Box(0f, sh / 2f, sw, sh / 2f)
+            if (reverseScreens) listOf(bottom, top) else listOf(top, bottom)
+        } else {
+            listOf(Box(0f, 0f, sw, sh))
+        }
     }
 
     override val controllerFrame: Box get() = controlsRect
@@ -68,7 +90,9 @@ class ProceduralSkinLayout(
         if (locked == LOCK_SCREEN) {
             val g = viewport.gameRect
             val nx = ((px - g.x) / maxOf(g.width, 1f) * 2f - 1f).coerceIn(-1f, 1f)
-            val ny = ((py - g.y) / maxOf(g.height, 1f) * 2f - 1f).coerceIn(-1f, 1f)
+            var ny = ((py - g.y) / maxOf(g.height, 1f) * 2f - 1f).coerceIn(-1f, 1f)
+            // Reversed: the touch screen (core bottom half) is displayed in the top half.
+            if (reverseScreens && hasTouchScreen) ny = if (ny < 0f) ny + 1f else ny - 1f
             return GamepadTouchSample(pointerX = nx, pointerY = ny)
         }
         val hit = controls.buttons(px, py, dpadLocked = locked == LOCK_DPAD)
@@ -112,6 +136,7 @@ class ProceduralSkinLayout(
             bottomInset: Float = 0f,
             leftInset: Float = 0f,
             rightInset: Float = 0f,
+            reverseScreens: Boolean = false,
         ): ProceduralSkinLayout? {
             if (width <= 0f || height <= 0f) return null
             val d = if (density > 0f) density else 1f
@@ -131,7 +156,9 @@ class ProceduralSkinLayout(
                 Box(insets.leading, insets.top, w - insets.leading - insets.trailing, h - insets.top - insets.bottom)
             }
             val controls = ConsoleControlsLayout.compute(region, system.gamepadLayout, landscape = !portrait)
-            return ProceduralSkinLayout(skin, system, d, w, h, viewport, controls, region)
+            return ProceduralSkinLayout(
+                skin, system, d, w, h, viewport, controls, region, sourceWidth, sourceHeight, reverseScreens,
+            )
         }
     }
 }
