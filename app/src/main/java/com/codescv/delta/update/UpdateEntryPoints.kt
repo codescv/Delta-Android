@@ -1,5 +1,8 @@
 package com.codescv.delta.update
 
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Feedback
+import androidx.compose.material.icons.outlined.SystemUpdate
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -12,9 +15,11 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import com.codescv.delta.R
 import com.codescv.delta.ui.components.FormRow
+import com.codescv.delta.ui.theme.DeltaColors
 
 /**
- * Settings › Support › "Check for Updates" row. The trailing value mirrors [UpdateManager.state];
+ * "检查更新 / Check for Updates" row (Settings top section and in-game Pause › … sheet). The
+ * subtitle mirrors [UpdateManager.state] and the trailing value shows the installed version;
  * tapping opens [UpdateDialog] and starts a check unless an update is already pending.
  */
 @Composable
@@ -24,8 +29,11 @@ fun CheckForUpdatesRow() {
     val state by manager.state.collectAsState()
 
     FormRow(
+        icon = Icons.Outlined.SystemUpdate,
+        iconColor = DeltaColors.BadgeBlue,
         title = stringResource(R.string.update_row_title),
-        value = updateStatusText(state, manager.currentVersion),
+        subtitle = updateStatusText(state, manager.currentVersion),
+        value = "v${manager.currentVersion}",
         chevron = true,
         onClick = {
             manager.showDialog()
@@ -44,7 +52,7 @@ private fun updateStatusText(
     currentVersion: String,
 ): String =
     when (state) {
-        UpdateState.Idle -> currentVersion
+        UpdateState.Idle -> stringResource(R.string.update_status_idle, currentVersion)
         UpdateState.Checking -> stringResource(R.string.update_status_checking)
         is UpdateState.UpToDate -> stringResource(R.string.update_status_up_to_date, state.latest.version)
         is UpdateState.Available -> stringResource(R.string.update_status_available, state.latest.version)
@@ -54,17 +62,21 @@ private fun updateStatusText(
             stringResource(R.string.update_status_error, stringResource(UpdateManager.errorStringRes(state.code)))
     }
 
-/** Settings › Support › "反馈给 Agent" row + [AgentFeedbackDialog]. */
+/** "反馈给 Agent / Send Feedback" row + [AgentFeedbackDialog] (Settings and Pause › … sheet). */
 @Composable
 fun AgentFeedbackRow() {
     val context = LocalContext.current
     var savedEmail by remember(context) { mutableStateOf(AgentFeedbackHelper.getSavedEmail(context)) }
     var showDialog by rememberSaveable { mutableStateOf(false) }
+    // Re-read the stored address whenever the dialog opens or closes (it may change elsewhere).
+    LaunchedEffect(showDialog) { savedEmail = AgentFeedbackHelper.getSavedEmail(context) }
 
     FormRow(
+        icon = Icons.Outlined.Feedback,
+        iconColor = DeltaColors.BadgePurple,
         title = stringResource(R.string.agent_feedback_title),
         subtitle =
-            if (savedEmail.isEmpty()) {
+            if (savedEmail.isBlank()) {
                 stringResource(R.string.agent_feedback_subtitle_unset)
             } else {
                 stringResource(R.string.agent_feedback_subtitle_configured, savedEmail)
@@ -83,8 +95,8 @@ fun AgentFeedbackRow() {
 }
 
 /**
- * Silent update check on launch (at most once per 24 h, persisted in SharedPreferences
- * `delta_update`); called once from MainActivity. When a newer release is found the update dialog
+ * Silent update check on every cold start (once per process, no 24 h lockout, like Lemuroid);
+ * called once from MainActivity. When a newer release is found the update dialog
  * is shown from here.
  */
 @Composable

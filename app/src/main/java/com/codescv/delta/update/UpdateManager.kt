@@ -105,6 +105,10 @@ class UpdateManager private constructor(
     private var generation: Int = 0
     private var autoCheckDone: Boolean = false
     private var pendingInstallAfterPermission: Boolean = false
+
+    /** Wall-clock time of the last [checkForUpdates] call; drives the foreground re-check. */
+    @Volatile
+    private var lastCheckTimeMs: Long = 0L
     private var lastReady: UpdateState.Downloaded? = null
     private var hostActivity: WeakReference<Activity>? = null
 
@@ -131,30 +135,25 @@ class UpdateManager private constructor(
     }
 
     /**
-     * Silent launch check, throttled to once per [AUTO_CHECK_INTERVAL_MS] (persisted in
-     * SharedPreferences `delta_update`) and once per process.
+     * Silent launch check, run unconditionally once per process on every cold start (like
+     * Lemuroid's `MainActivity.onCreate`). [PREF_LAST_AUTO_CHECK_MS] is still recorded for
+     * diagnostics, but no longer gates the check; foreground re-checks happen in [onHostResume].
      */
     fun autoCheckIfDue(nowMs: Long = System.currentTimeMillis()) {
         if (autoCheckDone) return
-        val last = prefs.getLong(PREF_LAST_AUTO_CHECK_MS, 0L)
-        if (!shouldAutoCheck(nowMs, last)) {
-            autoCheckDone = true
-            return
-        }
+        autoCheckDone = true
         prefs.edit().putLong(PREF_LAST_AUTO_CHECK_MS, nowMs).apply()
         checkForUpdates(silent = true)
     }
 
     /**
      * Checks GitHub for a newer release.
-     * When [silent] is true, runs at most once per process and suppresses UpToDate/Error states.
+     * When [silent] is true, no Checking state / error is shown; an up-to-date result still
+     * surfaces as [UpdateState.UpToDate] so Settings shows the latest version immediately.
      */
     fun checkForUpdates(silent: Boolean = false) {
         if (busy) return
-        if (silent) {
-            if (autoCheckDone) return
-            autoCheckDone = true
-        }
+        lastCheckTimeMs = System.currentTimeMillis()
         val prevJob = job
         val gen = ++generation
         val token = CancelToken().also { cancelToken = it }
@@ -179,12 +178,7 @@ class UpdateManager private constructor(
 
                     val latest = result.latest
                     if (!result.updateAvailable) {
-                        _state.value =
-                            if (silent) {
-                                prevReady?.takeIf { it.apkFile.isFile } ?: UpdateState.Idle
-                            } else {
-                                UpdateState.UpToDate(latest)
-                            }
+                        _state.value = prevReady?.takeIf { it.apkFile.isFile } ?: UpdateState.UpToDate(latest)
                     } else {
                         val readyFile = withContext(Dispatchers.IO) { existingDownload(latest) }
                         if (gen != generation) return@launch
@@ -212,7 +206,10 @@ class UpdateManager private constructor(
                             ).show()
                         }
                         _state.value = prevReady
-                    } else if (silent || wasCancelled) {
+                    } else if (silent) {
+                        // Silent checks never surface errors; keep the last shown status.
+                        if (_state.value == UpdateState.Checking) _state.value = UpdateState.Idle
+                    } else if (wasCancelled) {
                         _state.value = UpdateState.Idle
                     } else {
                         _state.value = UpdateState.Error(e.code)
@@ -231,7 +228,7 @@ class UpdateManager private constructor(
             return
         }
         hostActivity = WeakReference(activity)
-        pendingInstallAfterPermission = false
+        setPendingInstall(false)
         val gen = ++generation
         val token = CancelToken().also { cancelToken = it }
         val dest = apkFileFor(release)
@@ -276,7 +273,7 @@ class UpdateManager private constructor(
     /** Cancels an in-flight check or download and clears any pending install flag. */
     fun cancel() {
         val current = _state.value
-        pendingInstallAfterPermission = false
+        setPendingInstall(false)
         generation++
         cancelToken?.cancel()
         job?.cancel()
@@ -303,7 +300,7 @@ class UpdateManager private constructor(
                 }
             if (gen != generation || _state.value != downloadedState) return@launch
             if (validationError != null) {
-                pendingInstallAfterPermission = false
+                setPendingInstall(false)
                 lastReady = null
                 _state.value =
                     UpdateState.Error(
@@ -322,14 +319,28 @@ class UpdateManager private constructor(
      */
     fun onHostResume(activity: Activity) {
         hostActivity = WeakReference(activity)
-        if (
-            pendingInstallAfterPermission &&
-            _state.value is UpdateState.Downloaded &&
-            activity.packageManager.canRequestPackageInstalls()
-        ) {
-            pendingInstallAfterPermission = false
+        val pending = pendingInstallAfterPermission || prefs.getBoolean(PREF_PENDING_INSTALL, false)
+        // If the process was restarted, restoreDownloaded() may still be validating the cached APK
+        // on IO; it re-invokes this method once the Downloaded state is restored.
+        if (pending && _state.value is UpdateState.Downloaded && activity.packageManager.canRequestPackageInstalls()) {
+            setPendingInstall(false)
             installApk(activity)
+            return
         }
+        val current = _state.value
+        if (
+            autoCheckDone &&
+            System.currentTimeMillis() - lastCheckTimeMs >= FOREGROUND_RECHECK_INTERVAL_MS &&
+            (current == UpdateState.Idle || current is UpdateState.UpToDate || current is UpdateState.Error)
+        ) {
+            checkForUpdates(silent = true)
+        }
+    }
+
+    /** Mirrors the in-memory pending-install flag to prefs so it survives process death. */
+    private fun setPendingInstall(pending: Boolean) {
+        pendingInstallAfterPermission = pending
+        prefs.edit().putBoolean(PREF_PENDING_INSTALL, pending).apply()
     }
 
     private fun openInstaller(
@@ -338,7 +349,7 @@ class UpdateManager private constructor(
         apkFile: File,
     ) {
         if (!activity.packageManager.canRequestPackageInstalls()) {
-            pendingInstallAfterPermission = true
+            setPendingInstall(true)
             Toast.makeText(
                 activity,
                 activity.getString(R.string.update_allow_unknown_sources),
@@ -355,14 +366,14 @@ class UpdateManager private constructor(
             } catch (_: Exception) {
                 val fallback = Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES)
                 runCatching { activity.startActivity(fallback) }.onFailure {
-                    pendingInstallAfterPermission = false
+                    setPendingInstall(false)
                     _state.value = UpdateState.Error(UpdateErrorCode.INSTALLER, release)
                 }
             }
             return
         }
 
-        pendingInstallAfterPermission = false
+        setPendingInstall(false)
         try {
             val uri =
                 FileProvider.getUriForFile(
@@ -536,7 +547,11 @@ class UpdateManager private constructor(
                     }
                 }
                 best
-            } ?: return
+            } ?: run {
+                // No valid cached APK survived: drop any stale pending-install flag.
+                if (_state.value !is UpdateState.Downloaded) setPendingInstall(false)
+                return
+            }
 
         val (file, info) = restored
         val rawVersion =
@@ -559,6 +574,12 @@ class UpdateManager private constructor(
         if (_state.value == UpdateState.Idle) {
             _state.value = downloadedState
             _dialogVisible.value = true
+            // Android may kill the process while the user toggles "Install unknown apps";
+            // restore the pending flag so the next onHostResume() resumes the install.
+            pendingInstallAfterPermission = prefs.getBoolean(PREF_PENDING_INSTALL, false)
+            if (pendingInstallAfterPermission) {
+                hostActivity?.get()?.takeUnless { it.isFinishing || it.isDestroyed }?.let { onHostResume(it) }
+            }
         }
     }
 
@@ -566,6 +587,10 @@ class UpdateManager private constructor(
         const val EXPECTED_PACKAGE = "com.codescv.delta"
         const val PREFS_NAME = "delta_update"
         const val PREF_LAST_AUTO_CHECK_MS = "last_auto_check_ms"
+        const val PREF_PENDING_INSTALL = "pending_install_after_permission"
+
+        /** Minimum gap between silent re-checks when the app returns to the foreground. */
+        const val FOREGROUND_RECHECK_INTERVAL_MS = 5 * 60_000L
         const val AUTO_CHECK_INTERVAL_MS = 24L * 60 * 60 * 1000
         const val UPDATES_DIR = "updates"
         private const val APK_MIME_TYPE = "application/vnd.android.package-archive"

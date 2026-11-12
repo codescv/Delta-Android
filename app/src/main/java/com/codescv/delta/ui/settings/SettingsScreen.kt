@@ -53,9 +53,11 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.codescv.delta.DeltaApplication
+import com.codescv.delta.R
 import com.codescv.delta.settings.AppPreferences
 import com.codescv.delta.settings.PreferencesStore
 import com.codescv.delta.ui.components.FormDivider
@@ -219,7 +221,7 @@ private fun SettingsDestination(route: SettingsRoute, prefs: AppPreferences, nav
     }
 }
 
-/** Root list: sections exactly as Delta 2.0.5 `SettingsView` + Android **Support** section. */
+/** Root list: Android **Support** (更新与反馈) section first, then Delta 2.0.5 `SettingsView` sections. */
 @Composable
 private fun SettingsRoot(prefs: AppPreferences, nav: SettingsNav, onClose: () -> Unit) {
     val scroll = rememberScrollState()
@@ -248,6 +250,12 @@ private fun SettingsRoot(prefs: AppPreferences, nav: SettingsNav, onClose: () ->
                 modifier = Modifier.padding(start = 20.dp, top = 4.dp, bottom = 4.dp),
             )
 
+            // 更新与反馈 / Support first, so Check for Updates + Send Feedback are visible without scrolling.
+            FormSection(header = stringResource(R.string.support_section_header)) {
+                CheckForUpdatesRow()
+                FormDivider(inset = true)
+                AgentFeedbackRow()
+            }
             FormSection(header = "Controls") {
                 NavRow("Controllers", Icons.Outlined.SportsEsports, DeltaColors.BadgePurple) { nav.push(SettingsRoute.Controllers) }
                 FormDivider(inset = true)
@@ -287,11 +295,6 @@ private fun SettingsRoot(prefs: AppPreferences, nav: SettingsNav, onClose: () ->
                 FormRow(title = "Contributors", chevron = true, onClick = { nav.push(SettingsRoute.Contributors) })
                 FormDivider()
                 FormRow(title = "Software Licenses", chevron = true, onClick = { nav.push(SettingsRoute.Licenses) })
-            }
-            FormSection(header = "Support") {
-                CheckForUpdatesRow()
-                FormDivider()
-                AgentFeedbackRow()
             }
             Spacer(Modifier.height(12.dp))
             Text(

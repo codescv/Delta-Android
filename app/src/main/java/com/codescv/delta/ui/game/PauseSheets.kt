@@ -40,11 +40,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
 import com.codescv.delta.DeltaApplication
+import com.codescv.delta.R
 import com.codescv.delta.cheats.CheatCode
 import com.codescv.delta.cheats.CheatFormat
 import com.codescv.delta.cheats.CheatValidator
@@ -66,6 +68,8 @@ import com.codescv.delta.ui.components.FormSegmentedRow
 import com.codescv.delta.ui.components.FormToggleRow
 import com.codescv.delta.ui.theme.DeltaColors
 import com.codescv.delta.ui.theme.DeltaType
+import com.codescv.delta.update.AgentFeedbackRow
+import com.codescv.delta.update.CheckForUpdatesRow
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
@@ -251,6 +255,11 @@ fun MoreOptionsSheet(
                     onCheckedChange = { ui.reverseScreens = it },
                 )
             }
+        }
+        FormSection(header = stringResource(R.string.support_section_header)) {
+            CheckForUpdatesRow()
+            FormDivider(inset = true)
+            AgentFeedbackRow()
         }
         FormSection(header = "Fast Forward") {
             val mode = FastForwardMode.fromRaw(prefs.fastForwardMode)

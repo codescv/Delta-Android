@@ -17,6 +17,7 @@ import com.codescv.delta.input.GameInputRouter
 import com.codescv.delta.ui.DeltaApp
 import com.codescv.delta.ui.DeltaNavigator
 import com.codescv.delta.update.LaunchUpdateCheck
+import com.codescv.delta.update.UpdateManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -44,6 +45,15 @@ class MainActivity : ComponentActivity() {
     companion object {
         const val EXTRA_LAUNCH_ROM = "rom"
         const val EXTRA_RESUME_STATE = "state"
+    }
+
+    /**
+     * Resumes a pending APK install after "Install unknown apps" was granted (also after process
+     * death) and silently re-checks GitHub when returning to the foreground.
+     */
+    override fun onResume() {
+        super.onResume()
+        UpdateManager.get(this).onHostResume(this)
     }
 
     override fun onDestroy() {

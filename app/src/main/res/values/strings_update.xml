@@ -1,7 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- In-app updater + Agent feedback strings (ported from the Lemuroid fork's update module). -->
 <resources>
-    <string name="update_row_title">Check for Updates</string>
+    <string name="support_section_header">Support / 更新与反馈</string>
+    <string name="update_row_title">检查更新 (Check for Updates)</string>
     <string name="update_check_title">Check for updates</string>
     <string name="update_status_idle">Current version %1$s</string>
     <string name="update_status_checking">Checking…</string>
@@ -36,10 +37,10 @@
     <string name="update_error_no_apk">This release has no APK asset</string>
     <string name="update_error_installer">Cannot start package installer</string>
 
-    <string name="agent_feedback_title">反馈给 Agent</string>
+    <string name="agent_feedback_title">反馈给 Agent (Send Feedback)</string>
     <string name="agent_feedback_subtitle_unset">Configure Agent feedback email and send one-click feedback</string>
     <string name="agent_feedback_subtitle_configured">Send feedback to %1$s</string>
-    <string name="agent_feedback_dialog_title">反馈给 Agent</string>
+    <string name="agent_feedback_dialog_title">Send Feedback to Agent</string>
     <string name="agent_feedback_subject_preview">Subject: %1$s</string>
     <string name="agent_feedback_email_label">Agent Feedback Email</string>
     <string name="agent_feedback_email_hint">Stored locally on this device only</string>
