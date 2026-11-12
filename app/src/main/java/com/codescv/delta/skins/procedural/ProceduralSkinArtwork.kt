@@ -49,6 +49,9 @@ internal fun SkinColor.opacity(f: Float): Color = color.let { it.copy(alpha = it
 
 private val UnitDensity = Density(1f, 1f)
 
+/** Default `controllerOpacity` (ui_spec §6.2); the iOS translucent alphas are drawn at this value. */
+const val DEFAULT_CONTROLLER_OPACITY = 0.70f
+
 /**
  * Compose `Canvas` port of Delta's `ConsoleShellView` (portrait shell) and the visual half of
  * `VirtualGamepadView` (`DPadControl` / `PressableControl`) for a built-in procedural skin.
@@ -61,6 +64,10 @@ private val UnitDensity = Density(1f, 1f)
  * @param held buttons latched by the pause-menu "Hold Buttons" feature (drawn in `active`).
  * @param fastForwardHeld whether a touch is holding the fast-forward button.
  * @param controlsVisible draw the on-screen controls (false when a gamepad is connected).
+ * @param opacity `controllerOpacity` pref, applied to translucent (landscape) controls. The iOS
+ *   translucent alphas (0.55 fills, 0.6 D-Pad) correspond to the default 0.70 and scale with it.
+ * @param showHitBoxes Skin Debugging: purple 1 dp outline of each control's touch area.
+ * @param touches Show Touches: active pointer positions in view pixels.
  */
 @Composable
 fun ProceduralSkinArtwork(
@@ -74,6 +81,9 @@ fun ProceduralSkinArtwork(
     modifier: Modifier = Modifier,
     fastForwardHeld: Boolean = false,
     controlsVisible: Boolean = true,
+    opacity: Float = DEFAULT_CONTROLLER_OPACITY,
+    showHitBoxes: Boolean = false,
+    touches: List<Pair<Float, Float>> = emptyList(),
 ) {
     val l = layout as? ProceduralSkinLayout ?: return
     val skin = remember(optionId, l.skin) {
@@ -83,6 +93,7 @@ fun ProceduralSkinArtwork(
     Canvas(modifier.fillMaxSize().graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }) {
         withTransform({ scale(l.density, l.density, pivot = Offset.Zero) }) {
             val painter = ArtworkPainter(this, measurer)
+            painter.translucentScale = (opacity / DEFAULT_CONTROLLER_OPACITY).coerceIn(0f, 1f / 0.6f)
             if (l.portrait) {
                 painter.drawShell(l, skin, system)
                 // Punch out the game screen so the video underneath is visible.
@@ -95,13 +106,21 @@ fun ProceduralSkinArtwork(
                     fastForwardActive = fastForwardActive, fastForwardMultiplier = fastForwardMultiplier,
                     fastForwardHeld = fastForwardHeld,
                 )
+                if (showHitBoxes) painter.drawHitBoxes(l.controls)
             }
+            for ((x, y) in touches) painter.drawTouch(x / l.density, y / l.density)
         }
     }
 }
 
+private val DeltaPurple = Color(0xFF8A2BE2)
+
 /** Draws in layout points (the caller applies the density transform). */
 private class ArtworkPainter(private val ds: DrawScope, private val measurer: TextMeasurer) {
+    /** Multiplier for the translucent (landscape) control alphas, from `controllerOpacity`. */
+    var translucentScale = 1f
+
+    private fun translucentAlpha(base: Float) = (base * translucentScale).coerceIn(0f, 1f)
 
     // region Text
 
@@ -442,7 +461,7 @@ private class ArtworkPainter(private val ds: DrawScope, private val measurer: Te
         pressed: Boolean,
     ) {
         if (rect.width <= 0f || rect.height <= 0f) return
-        val fillColor = (if (pressed) pressedFill else fill).opacity(if (translucent) 0.55f else 1f)
+        val fillColor = (if (pressed) pressedFill else fill).opacity(if (translucent) translucentAlpha(0.55f) else 1f)
         val radius = min(rect.width, rect.height) / 2f
         ds.scale(if (pressed) 0.94f else 1f, pivot = Offset(rect.midX, rect.midY)) {
             if (circle) {
@@ -470,7 +489,7 @@ private class ArtworkPainter(private val ds: DrawScope, private val measurer: Te
         val cx = rect.midX
         val cy = rect.midY
         val arm = s * 0.34f
-        dot(cx, cy, s / 2f, p.ring.opacity(if (translucent) 0.25f else 0.55f))
+        dot(cx, cy, s / 2f, p.ring.opacity(if (translucent) translucentAlpha(0.25f) else 0.55f))
 
         val vertical = Box(cx - arm / 2f, cy - s * 0.46f, arm, s * 0.92f)
         val horizontal = Box(cx - s * 0.46f, cy - arm / 2f, s * 0.92f, arm)
@@ -480,7 +499,7 @@ private class ArtworkPainter(private val ds: DrawScope, private val measurer: Te
                 roundRect(Box(b.x - inflate, b.y - inflate + dy, b.width + 2 * inflate, b.height + 2 * inflate), corner + inflate, c)
             }
         }
-        val capColor = p.cap.opacity(if (translucent) 0.6f else 1f)
+        val capColor = p.cap.opacity(if (translucent) translucentAlpha(0.6f) else 1f)
         // One unioned path so translucent arms don't double up in the middle.
         fun rr(b: Box) = Path().apply { addRoundRect(RoundRect(b.x, b.y, b.maxX, b.maxY, CornerRadius(corner))) }
         val cross = Path().apply { op(rr(vertical), rr(horizontal), PathOperation.Union) }
@@ -507,6 +526,29 @@ private class ArtworkPainter(private val ds: DrawScope, private val measurer: Te
                 }
             }
         }
+    }
+
+    /** Skin Debugging hit areas (`ConsoleControlsLayout` slops), 1 pt deltaPurple outlines. */
+    fun drawHitBoxes(c: ConsoleControlsLayout) {
+        val purple = DeltaPurple
+        val stroke = Stroke(1f)
+        fun rect(b: Box) = ds.drawRect(purple, b.offset(), b.size(), style = stroke)
+        rect(c.dpad.inset(-ConsoleControlsLayout.DPAD_LOCK_SLOP, -ConsoleControlsLayout.DPAD_LOCK_SLOP))
+        for (r in c.faceButtons.values) {
+            val radius = min(r.width, r.height) / 2f * ConsoleControlsLayout.FACE_HIT_RADIUS_SCALE
+            ds.drawCircle(purple, radius, Offset(r.midX, r.midY), style = stroke)
+        }
+        val slop = ConsoleControlsLayout.SMALL_BUTTON_SLOP
+        for (r in c.shoulderButtons.values + listOf(c.start, c.select, c.fastForward)) {
+            if (r.width > 0f) rect(r.inset(-slop, -slop))
+        }
+        rect(c.menu.inset(-ConsoleControlsLayout.MENU_SLOP, -ConsoleControlsLayout.MENU_SLOP))
+    }
+
+    /** Show Touches: 44 pt deltaPurple 45 % circle with a 2 pt white outline. */
+    fun drawTouch(x: Float, y: Float) {
+        ds.drawCircle(DeltaPurple.copy(alpha = 0.45f), 22f, Offset(x, y))
+        ds.drawCircle(Color.White, 22f, Offset(x, y), style = Stroke(2f))
     }
 
     // endregion

@@ -37,7 +37,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.codescv.delta.DeltaApplication
 import com.codescv.delta.model.VirtualButton
+import com.codescv.delta.skins.DeltaSkin
 import com.codescv.delta.skins.DeltaSkinLayout
+import com.codescv.delta.skins.Box as SkinBox
 import com.codescv.delta.skins.SkinCatalog
 import com.codescv.delta.skins.SkinOption
 import com.codescv.delta.ui.theme.DeltaColors
@@ -189,6 +191,11 @@ fun RenderedSkinPreview(option: SkinOption, selected: Boolean, modifier: Modifie
     }
 }
 
+/**
+ * Port of `DeltaSkinRenderer.preview`, framed on the portrait controller: black fill,
+ * `#383838` placeholder for controller-placed screens, the background artwork, then every item
+ * asset at its frame (thumbstick assets sized by `assetSize`, centered), composited on ARGB_8888.
+ */
 private fun renderPreview(option: SkinOption, width: Int, height: Int): ImageBitmap? = runCatching {
     val repo = DeltaApplication.container.skins
     val loaded = when (option.kind) {
@@ -196,9 +203,41 @@ private fun renderPreview(option: SkinOption, width: Int, height: Int): ImageBit
         else -> repo.bundled(option.family)
     } ?: return null
     val rep = loaded.skin.representation(portrait = true) ?: loaded.skin.representation(portrait = false) ?: return null
-    val asset = rep.backgroundAsset ?: return null
-    val fit = DeltaSkinLayout.aspectFit(rep.mappingSize, com.codescv.delta.skins.Box(0f, 0f, width.toFloat(), height.toFloat()))
-    val bmp: Bitmap = repo.render(loaded, asset, fit.width.toInt().coerceAtLeast(1), fit.height.toInt().coerceAtLeast(1))
-        ?: return null
-    bmp.asImageBitmap()
+    val fit = DeltaSkinLayout.aspectFit(rep.mappingSize, SkinBox(0f, 0f, width.toFloat(), height.toFloat()))
+    val w = fit.width.toInt().coerceAtLeast(1)
+    val h = fit.height.toInt().coerceAtLeast(1)
+    val cf = SkinBox(0f, 0f, w.toFloat(), h.toFloat())
+    val out = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+    val canvas = android.graphics.Canvas(out)
+    canvas.drawColor(android.graphics.Color.BLACK)
+    val screenPaint = android.graphics.Paint().apply { color = 0xFF383838.toInt() }
+    for (screen in rep.screens) {
+        val o = screen.outputFrame ?: continue
+        if (!screen.controllerPlacement) continue
+        val r = DeltaSkinLayout.denormalize(o, cf)
+        canvas.drawRect(r.minX, r.minY, r.maxX, r.maxY, screenPaint)
+    }
+    val paint = android.graphics.Paint(android.graphics.Paint.FILTER_BITMAP_FLAG or android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+        alpha = if (rep.translucent) (0.7f * 255).toInt() else 255
+    }
+    fun draw(name: String, r: SkinBox) {
+        val bw = r.width.toInt()
+        val bh = r.height.toInt()
+        if (bw <= 0 || bh <= 0) return
+        val bmp = repo.render(loaded, name, bw, bh) ?: return
+        canvas.drawBitmap(bmp, null, android.graphics.RectF(r.minX, r.minY, r.maxX, r.maxY), paint)
+    }
+    rep.backgroundAsset?.let { draw(it, cf) }
+    for (item in rep.items) {
+        val name = item.assetName ?: continue
+        var r = DeltaSkinLayout.denormalize(item.frame, cf)
+        val size = item.assetSize
+        if (item.kind == DeltaSkin.ItemKind.THUMBSTICK && size != null) {
+            val tw = size.width * cf.width
+            val th = size.height * cf.height
+            r = SkinBox(r.midX - tw / 2f, r.midY - th / 2f, tw, th)
+        }
+        draw(name, r)
+    }
+    out.asImageBitmap()
 }.getOrNull()

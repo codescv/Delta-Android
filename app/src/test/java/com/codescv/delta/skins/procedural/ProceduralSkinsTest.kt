@@ -321,6 +321,24 @@ class ProceduralSkinsTest {
     }
 
     @Test
+    fun ndsReverseScreensSwapsSourcesAndPointer() {
+        val normal = layout(GameSystem.NDS, 1080f, 2400f, 256f, 384f)
+        assertEquals(listOf(Box(0f, 0f, 256f, 192f), Box(0f, 192f, 256f, 192f)), normal.screenSources)
+        val rev = ProceduralSkins.layout(
+            "nds-pink", GameSystem.NDS, 1080f, 2400f, 256f, 384f, density = density, reverseScreens = true,
+        ) as ProceduralSkinLayout
+        assertEquals(listOf(Box(0f, 192f, 256f, 192f), Box(0f, 0f, 256f, 192f)), rev.screenSources)
+        assertEquals(normal.screens, rev.screens)
+        // The touch screen is now displayed on top: its center maps to the core bottom-half center.
+        val top = rev.screens[0]
+        val s = rev.sample(top.midX, top.midY, ProceduralSkinLayout.LOCK_SCREEN)
+        assertEquals(0.5f, s.pointerY!!, 0.01f)
+        val bottom = rev.screens[1]
+        assertEquals(-0.5f, rev.sample(bottom.midX, bottom.midY, ProceduralSkinLayout.LOCK_SCREEN).pointerY!!, 0.01f)
+        assertEquals(listOf(Box(0f, 0f, 240f, 160f)), layout(GameSystem.GBA, 1080f, 2400f).screenSources)
+    }
+
+    @Test
     fun trackerIntegrationMenuAndSlide() {
         val l = layout(GameSystem.GBA, 1080f, 2400f)
         val tracker = GamepadTouchTracker(l)

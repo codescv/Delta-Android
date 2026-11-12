@@ -111,6 +111,7 @@ object ProceduralSkins {
      * @param sourceWidth core video size, used for the aspect ratio (0 → system default).
      * @param density pixels per layout point (dp); defaults to the device density.
      * @param topInset safe-area insets in pixels (status bar / cutout).
+     * @param reverseScreens NDS: show the bottom screen on top (see `ProceduralSkinLayout.screenSources`).
      * @return null for an empty container.
      */
     fun layout(
@@ -125,10 +126,12 @@ object ProceduralSkins {
         bottomInset: Float = 0f,
         leftInset: Float = 0f,
         rightInset: Float = 0f,
+        reverseScreens: Boolean = false,
     ): ProceduralLayout? {
         val skin = skin(optionId, system) ?: return null
         return ProceduralSkinLayout.compute(
             skin, system, width, height, sourceWidth, sourceHeight, density, topInset, bottomInset, leftInset, rightInset,
+            reverseScreens,
         )
     }
 }
