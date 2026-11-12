@@ -107,13 +107,13 @@ sealed interface ActiveSkin {
     data class Procedural(override val optionId: String, val layout: ProceduralLayout, val system: GameSystem) : ActiveSkin {
         override val mapper: GamepadTouchMapper get() = layout
         override val quads: List<ScreenQuad>
-            get() = if (system == GameSystem.NDS && layout.screens.size >= 2) {
-                listOf(
-                    ScreenQuad(layout.screens[0], SkinBox(0f, 0f, 256f, 192f)),
-                    ScreenQuad(layout.screens[1], SkinBox(0f, 192f, 256f, 192f)),
-                )
-            } else {
-                layout.screens.map { ScreenQuad(it, null) }
+            get() {
+                // Each screen's core-pixel source (NDS halves, swapped when screens are reversed).
+                val sources = (layout as? com.codescv.delta.skins.procedural.ProceduralSkinLayout)?.screenSources
+                return layout.screens.mapIndexed { i, dest ->
+                    val src = sources?.getOrNull(i)
+                    ScreenQuad(dest, if (system == GameSystem.NDS) src else null)
+                }
             }
     }
 
@@ -176,7 +176,8 @@ fun resolveSkin(
     if (option?.kind == SkinOption.Kind.VARIANT || system.skinSystem == null) {
         val id = option?.id ?: ProceduralSkins.options(family).firstOrNull()?.id
         if (id != null) {
-            ProceduralSkins.layout(id, system, width, height, sourceW, sourceH)?.let { return ActiveSkin.Procedural(id, it, system) }
+            ProceduralSkins.layout(id, system, width, height, sourceW, sourceH, reverseScreens = reverseScreens)
+                ?.let { return ActiveSkin.Procedural(id, it, system) }
         }
     }
     val candidates = buildList {
@@ -470,6 +471,9 @@ fun GameScreen(rom: RomEntry, resumeStateId: String?, navigator: DeltaNavigator)
                     fastForwardActive = ui.fastForwardActive,
                     fastForwardMultiplier = ui.fastForwardMultiplier,
                     fastForwardHeld = ui.fastForwardHeld,
+                    opacity = prefs.controllerOpacity.toFloat(),
+                    showHitBoxes = showHitBoxes,
+                    touches = if (showTouches) ui.touches else emptyList(),
                 )
                 is ActiveSkin.None -> Unit
             }
