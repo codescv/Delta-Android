@@ -1,7 +1,7 @@
 // Copyright 2026 Google LLC
 
-#ifndef EXPERIMENTAL_USERS_CHII_IOS_DELTA_CORE_CHIP8_MACHINE_H_
-#define EXPERIMENTAL_USERS_CHII_IOS_DELTA_CORE_CHIP8_MACHINE_H_
+#ifndef DELTA_CORE_CHIP8_MACHINE_H_
+#define DELTA_CORE_CHIP8_MACHINE_H_
 
 #include <stdbool.h>
 #include <stddef.h>
@@ -66,4 +66,4 @@ bool chip8_unserialize(chip8_machine* m, const uint8_t* in, size_t size);
 }  // extern "C"
 #endif
 
-#endif  // EXPERIMENTAL_USERS_CHII_IOS_DELTA_CORE_CHIP8_MACHINE_H_
+#endif  // DELTA_CORE_CHIP8_MACHINE_H_

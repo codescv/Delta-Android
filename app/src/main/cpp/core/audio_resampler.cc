@@ -4,7 +4,7 @@
 
 #include <algorithm>
 
-namespace lemuroid {
+namespace delta {
 
 AudioResampler::AudioResampler(AudioRingBuffer* ring) : ring_(ring) {}
 
@@ -109,4 +109,4 @@ size_t AudioResampler::Render(float* left, float* right, size_t frames,
   return real;
 }
 
-}  // namespace lemuroid
+}  // namespace delta

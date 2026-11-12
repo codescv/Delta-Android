@@ -1,7 +1,7 @@
 // Copyright 2026 Google LLC
 
-#ifndef EXPERIMENTAL_USERS_CHII_IOS_DELTA_CORE_DEMO_ROMS_H_
-#define EXPERIMENTAL_USERS_CHII_IOS_DELTA_CORE_DEMO_ROMS_H_
+#ifndef DELTA_CORE_DEMO_ROMS_H_
+#define DELTA_CORE_DEMO_ROMS_H_
 
 #include <stddef.h>
 #include <stdint.h>
@@ -24,4 +24,4 @@ const lr_demo_rom* lr_demo_rom_named(const char* file_name);
 }  // extern "C"
 #endif
 
-#endif  // EXPERIMENTAL_USERS_CHII_IOS_DELTA_CORE_DEMO_ROMS_H_
+#endif  // DELTA_CORE_DEMO_ROMS_H_

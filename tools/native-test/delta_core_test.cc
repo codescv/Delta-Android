@@ -20,7 +20,7 @@
 
 extern "C" void retro_run(void);
 
-namespace lemuroid {
+namespace delta {
 namespace {
 
 void* OpenSelfImage() {
@@ -510,7 +510,7 @@ TEST(Crc32Test, MatchesZlibReferenceAndIsIncremental) {
 }
 
 }  // namespace
-}  // namespace lemuroid
+}  // namespace delta
 
 #define LR_EXPORT extern "C" __attribute__((visibility("default"), used))
 namespace {

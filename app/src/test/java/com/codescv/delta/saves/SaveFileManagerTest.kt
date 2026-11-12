@@ -41,21 +41,39 @@ class SaveFileManagerTest {
     @Test
     fun sectionsAutoQuickGeneralLocked() {
         val m = SaveFileManager(tmp.root)
-        m.writeState(rom, byteArrayOf(1), header, byteArrayOf(9), SaveStateType.AUTO)
+        val a1 = m.writeState(rom, byteArrayOf(1), header, byteArrayOf(9), SaveStateType.AUTO)
         m.writeState(rom, byteArrayOf(2), header, null, SaveStateType.QUICK)
         val g1 = m.writeState(rom, byteArrayOf(3), header, null, SaveStateType.GENERAL)
         val g2 = m.writeState(rom, byteArrayOf(4), header, null, SaveStateType.GENERAL, name = "Boss")
         m.setLocked(rom, g2.id, true)
         val s = m.sections(rom)
-        assertEquals(1, s[SaveStateType.AUTO]!!.size)
-        assertEquals(1, s[SaveStateType.QUICK]!!.size)
+        assertEquals(listOf("auto1"), s[SaveStateType.AUTO]!!.map { it.id })
+        assertEquals(listOf("quick"), s[SaveStateType.QUICK]!!.map { it.id })
         assertEquals(listOf(g1.id), s[SaveStateType.GENERAL]!!.map { it.id })
+        assertEquals("Save State 1", g1.name)
         assertEquals(listOf("Boss"), s[SaveStateType.LOCKED]!!.map { it.name })
-        assertTrue(m.screenshotFile(rom, SaveFileManager.AUTO_ID).isFile)
-        // Auto save is overwritten in place.
-        m.writeState(rom, byteArrayOf(5), header, null, SaveStateType.AUTO)
-        assertEquals(1, m.sections(rom)[SaveStateType.AUTO]!!.size)
-        assertArrayEquals(byteArrayOf(5), m.readState(rom, SaveFileManager.AUTO_ID).second)
+        assertTrue(m.screenshotFile(rom, a1.id).isFile)
+        assertTrue(java.io.File(m.stateDirectory(rom), "states.json").isFile)
+    }
+
+    @Test
+    fun autoSavesRotateBetweenTwoSlots() {
+        val m = SaveFileManager(tmp.root)
+        val first = m.writeState(rom, byteArrayOf(1), header, null, SaveStateType.AUTO)
+        Thread.sleep(5)
+        val second = m.writeState(rom, byteArrayOf(2), header, null, SaveStateType.AUTO)
+        Thread.sleep(5)
+        val third = m.writeState(rom, byteArrayOf(3), header, null, SaveStateType.AUTO)
+        assertEquals("auto1", first.id)
+        assertEquals("auto2", second.id)
+        assertEquals("auto1", third.id) // oldest overwritten
+        val autos = m.sections(rom)[SaveStateType.AUTO]!!
+        assertEquals(listOf("auto1", "auto2"), autos.map { it.id }) // newest first
+        assertEquals("auto1", m.latestAutoState(rom)!!.id)
+        assertArrayEquals(byteArrayOf(3), m.readState(rom, "auto1").second)
+        // Auto saves are loadable / exportable but cannot be locked.
+        assertTrue(m.exportState(rom, "auto2").isNotEmpty())
+        assertFalse(m.setLocked(rom, "auto2", true)!!.isLocked)
     }
 
     @Test
@@ -85,6 +103,7 @@ class SaveFileManagerTest {
         val m = SaveFileManager(tmp.root)
         val g = m.writeState(rom, byteArrayOf(1, 2, 3), header, null, SaveStateType.GENERAL)
         assertEquals("Before Boss", m.rename(rom, g.id, "  Before Boss ")!!.name)
+        assertEquals("Advance Wars (USA) (Rev 1).Before Boss.svs", m.suggestedStateFileName(rom, m.state(rom, g.id)!!))
         val exported = m.exportState(rom, g.id)
         val imported = m.importState(exported, rom, expectedCoreId = "gba")
         assertArrayEquals(byteArrayOf(1, 2, 3), m.readState(rom, imported.id).second)

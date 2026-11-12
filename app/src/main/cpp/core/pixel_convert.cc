@@ -4,7 +4,7 @@
 
 #include <cstring>
 
-namespace lemuroid {
+namespace delta {
 namespace {
 
 inline uint8_t Expand5(uint32_t v) {
@@ -79,4 +79,4 @@ bool ConvertToRgba8888(retro_pixel_format format, const void* src,
   return true;
 }
 
-}  // namespace lemuroid
+}  // namespace delta

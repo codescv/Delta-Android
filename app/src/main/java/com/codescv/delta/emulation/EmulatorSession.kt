@@ -3,7 +3,6 @@ package com.codescv.delta.emulation
 import android.graphics.Bitmap
 import android.media.AudioAttributes
 import android.media.AudioFormat
-import android.media.AudioManager
 import android.media.AudioTrack
 import android.os.Handler
 import android.os.Looper
@@ -35,6 +34,7 @@ class EmulatorSession(
     val rom: RomEntry,
     private val saves: SaveFileManager,
     private val systemDirectory: File,
+    private val cacheDirectory: File,
     private val coreOptions: Map<String, String> = emptyMap(),
     fastForwardMode: FastForwardMode = FastForwardMode.TOGGLE,
     fastForwardMultiplier: Int = 2,
@@ -116,10 +116,11 @@ class EmulatorSession(
     /** Creates the core, loads the ROM / SRAM / optional save state, starts threads. */
     fun start(resumeStateId: String? = null, cheats: List<CheatCode> = emptyList()) {
         NativeBridge.ensureLoaded()
-        handle = NativeBridge.nativeCreate(coreId)
         systemDirectory.mkdirs()
-        saves.savesDirectory.mkdirs()
-        NativeBridge.nativeSetDirectories(handle, systemDirectory.absolutePath, File(saves.savesDirectory, rom.systemId).apply { mkdirs() }.absolutePath)
+        cacheDirectory.mkdirs()
+        val saveDir = File(saves.savesDirectory, rom.systemId).apply { mkdirs() }
+        // Directories are injected before retro_init (Android has no /tmp).
+        handle = NativeBridge.nativeCreate(coreId, systemDirectory.absolutePath, saveDir.absolutePath, cacheDirectory.absolutePath)
         for ((k, v) in defaultCoreOptions(system) + coreOptions) NativeBridge.nativeSetOption(handle, k, v)
         val err = NativeBridge.nativeLoadGame(handle, rom.path)
         if (err != null) {
@@ -242,13 +243,17 @@ class EmulatorSession(
         t.start()
     }
 
+    /** Device output rate (AudioManager.PROPERTY_OUTPUT_SAMPLE_RATE), fallback 48 kHz. */
+    @Volatile var outputSampleRate: Int = 48000
+
     private fun audioLoop() {
         try {
             Process.setThreadPriority(Process.THREAD_PRIORITY_URGENT_AUDIO)
         } catch (_: Throwable) {
         }
-        val rate = 48000
-        val minBuf = AudioTrack.getMinBufferSize(rate, AudioFormat.CHANNEL_OUT_STEREO, AudioFormat.ENCODING_PCM_FLOAT)
+        val rate = outputSampleRate.takeIf { it in 8000..192000 } ?: 48000
+        val minBuf = AudioTrack.getMinBufferSize(rate, AudioFormat.CHANNEL_OUT_STEREO, AudioFormat.ENCODING_PCM_16BIT)
+        val tenMsBytes = rate / 100 * 4
         val track = try {
             AudioTrack.Builder()
                 .setAudioAttributes(
@@ -260,21 +265,22 @@ class EmulatorSession(
                 .setAudioFormat(
                     AudioFormat.Builder()
                         .setSampleRate(rate)
-                        .setEncoding(AudioFormat.ENCODING_PCM_FLOAT)
+                        .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
                         .setChannelMask(AudioFormat.CHANNEL_OUT_STEREO)
                         .build(),
                 )
                 .setTransferMode(AudioTrack.MODE_STREAM)
                 .setPerformanceMode(AudioTrack.PERFORMANCE_MODE_LOW_LATENCY)
-                .setBufferSizeInBytes(maxOf(minBuf, 4096 * 8))
+                .setBufferSizeInBytes(maxOf(minBuf, 3 * tenMsBytes))
                 .build()
         } catch (e: Throwable) {
             Log.w(TAG, "AudioTrack unavailable", e)
             return
         }
-        val frames = 256
-        val buffer = FloatArray(frames * 2)
-        val silence = FloatArray(frames * 2)
+        // 5 ms chunks pulled from the native resampler (+-0.5 % fill-rate control).
+        val frames = maxOf(64, rate / 200)
+        val buffer = ShortArray(frames * 2)
+        val silence = ShortArray(frames * 2)
         try {
             track.play()
             while (running.get()) {
@@ -283,8 +289,9 @@ class EmulatorSession(
                     track.write(silence, 0, silence.size, AudioTrack.WRITE_BLOCKING)
                     continue
                 }
-                NativeBridge.nativeRenderAudio(h, buffer, frames, rate.toDouble())
-                track.write(buffer, 0, buffer.size, AudioTrack.WRITE_BLOCKING)
+                val n = NativeBridge.nativeRenderAudio(h, buffer, frames, rate.toDouble())
+                if (n > 0) track.write(buffer, 0, n * 2, AudioTrack.WRITE_BLOCKING)
+                else track.write(silence, 0, silence.size, AudioTrack.WRITE_BLOCKING)
             }
         } catch (e: Throwable) {
             Log.w(TAG, "audio loop failed", e)
@@ -466,11 +473,7 @@ class EmulatorSession(
             val payload = coreLock.withLock { if (handle != 0L) NativeBridge.nativeSaveState(handle) else null }
                 ?: throw IllegalStateException("core does not support save states")
             val header = SaveStateHeader(coreId, rom.systemId, rom.crc32 ?: 0, System.currentTimeMillis() / 1000.0)
-            val info = if (id != null) {
-                saves.writeState(rom, payload, header, screenshotPng(), type, id = id, name = name)
-            } else {
-                saves.writeState(rom, payload, header, screenshotPng(), type, name = name)
-            }
+            val info = saves.writeState(rom, payload, header, screenshotPng(320), type, id = id, name = name)
             if (!quiet) message("Saved State")
             info
         } catch (e: Exception) {

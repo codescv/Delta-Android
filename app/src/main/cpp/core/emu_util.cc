@@ -5,7 +5,7 @@
 #include <algorithm>
 #include <array>
 
-namespace lemuroid {
+namespace delta {
 namespace {
 
 constexpr std::array<uint32_t, 256> MakeCrcTable() {
@@ -52,4 +52,4 @@ int FramePacer::FramesForElapsed(double elapsed_seconds) {
   return frames;
 }
 
-}  // namespace lemuroid
+}  // namespace delta

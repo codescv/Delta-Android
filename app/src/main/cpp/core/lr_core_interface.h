@@ -1,7 +1,7 @@
 // Copyright 2026 Google LLC
 
-#ifndef EXPERIMENTAL_USERS_CHII_IOS_DELTA_CORE_LR_CORE_INTERFACE_H_
-#define EXPERIMENTAL_USERS_CHII_IOS_DELTA_CORE_LR_CORE_INTERFACE_H_
+#ifndef DELTA_CORE_LR_CORE_INTERFACE_H_
+#define DELTA_CORE_LR_CORE_INTERFACE_H_
 
 #include "core/lr_libretro.h"
 
@@ -43,4 +43,4 @@ typedef struct lr_core_interface {
 }  // extern "C"
 #endif
 
-#endif  // EXPERIMENTAL_USERS_CHII_IOS_DELTA_CORE_LR_CORE_INTERFACE_H_
+#endif  // DELTA_CORE_LR_CORE_INTERFACE_H_

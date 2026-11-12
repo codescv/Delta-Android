@@ -25,11 +25,14 @@ object NativeBridge {
     // Discovery & lifecycle -----------------------------------------------------------------
     /** Flattened triples of (coreId, displayName, systemId). */
     @JvmStatic external fun nativeBuiltinCores(): Array<String>
-    @JvmStatic external fun nativeCreate(coreId: String): Long
+    /** Creates a core; directories are applied before `retro_init` (no `/tmp` on Android). */
+    @JvmStatic external fun nativeCreate(coreId: String, systemDir: String, saveDir: String, cacheDir: String): Long
     @JvmStatic external fun nativeDestroy(handle: Long)
     /** [libraryName, libraryVersion, validExtensions]. */
     @JvmStatic external fun nativeCoreInfo(handle: Long): Array<String?>
     @JvmStatic external fun nativeSetDirectories(handle: Long, systemDir: String, saveDir: String)
+    /** Directory a core receives: 0 = system, 1 = save, 2 = core assets; null if refused. */
+    @JvmStatic external fun nativeQueryDirectory(handle: Long, which: Int): String?
     @JvmStatic external fun nativeSetOption(handle: Long, key: String, value: String)
     @JvmStatic external fun nativeGetOption(handle: Long, key: String): String
     @JvmStatic external fun nativeCoreOptionsJson(handle: Long): String
@@ -60,7 +63,8 @@ object NativeBridge {
     @JvmStatic external fun nativeCopyFrame(handle: Long, directBuffer: ByteBuffer): Int
 
     // Audio ----------------------------------------------------------------------------------
-    @JvmStatic external fun nativeRenderAudio(handle: Long, interleaved: FloatArray, frames: Int, outputRate: Double): Int
+    /** Interleaved stereo PCM16 via the native resampler; returns frames written. */
+    @JvmStatic external fun nativeRenderAudio(handle: Long, interleaved: ShortArray, frames: Int, outputRate: Double): Int
     @JvmStatic external fun nativeSetAudioMuted(handle: Long, muted: Boolean)
     @JvmStatic external fun nativeSetAudioVolume(handle: Long, volume: Float)
     @JvmStatic external fun nativeQueuedAudioFrames(handle: Long): Int

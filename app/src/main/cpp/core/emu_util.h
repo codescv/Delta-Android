@@ -1,12 +1,12 @@
 // Copyright 2026 Google LLC
 
-#ifndef EXPERIMENTAL_USERS_CHII_IOS_DELTA_CORE_EMU_UTIL_H_
-#define EXPERIMENTAL_USERS_CHII_IOS_DELTA_CORE_EMU_UTIL_H_
+#ifndef DELTA_CORE_EMU_UTIL_H_
+#define DELTA_CORE_EMU_UTIL_H_
 
 #include <cstddef>
 #include <cstdint>
 
-namespace lemuroid {
+namespace delta {
 
 uint32_t Crc32Update(uint32_t crc, const void* data, size_t size);
 inline uint32_t Crc32(const void* data, size_t size) {
@@ -34,6 +34,6 @@ class FramePacer {
   double accumulator_ = 0.0;
 };
 
-}  // namespace lemuroid
+}  // namespace delta
 
-#endif  // EXPERIMENTAL_USERS_CHII_IOS_DELTA_CORE_EMU_UTIL_H_
+#endif  // DELTA_CORE_EMU_UTIL_H_

@@ -17,7 +17,7 @@
 #include "core/chip8_libretro.h"
 #include "core/pixel_convert.h"
 
-namespace lemuroid {
+namespace delta {
 namespace {
 
 struct retro_core_options_intl_payload {
@@ -96,7 +96,7 @@ LibretroHost::LibretroHost(const lr_core_interface& core, std::string core_path,
 
 std::unique_ptr<LibretroHost> LibretroHost::CreateWithInterface(
     const lr_core_interface& core, const std::string& core_path,
-    void* dl_handle, std::string* error) {
+    void* dl_handle, std::string* error, const HostDirs& dirs) {
   const void* const* fns = reinterpret_cast<const void* const*>(&core);
   for (size_t k = 0; k < sizeof(core) / sizeof(void*); ++k) {
     if (fns[k] == nullptr) {
@@ -116,6 +116,10 @@ std::unique_ptr<LibretroHost> LibretroHost::CreateWithInterface(
   }
 
   std::lock_guard<std::recursive_mutex> lock(host->core_mutex_);
+  // Directories are applied before retro_set_environment()/retro_init().
+  host->system_dir_ = dirs.system_dir;
+  host->save_dir_ = dirs.save_dir;
+  host->cache_dir_ = dirs.cache_dir;
   host->api_version_ = core.retro_api_version();
   if (host->api_version_ != RETRO_API_VERSION) {
     SetError(error, "unsupported libretro API version " +
@@ -142,11 +146,16 @@ std::unique_ptr<LibretroHost> LibretroHost::CreateWithInterface(
 
 std::unique_ptr<LibretroHost> LibretroHost::CreateBuiltin(
     const std::string& core_id, std::string* error) {
+  return CreateBuiltin(core_id, HostDirs(), error);
+}
+
+std::unique_ptr<LibretroHost> LibretroHost::CreateBuiltin(
+    const std::string& core_id, const HostDirs& dirs, std::string* error) {
   for (const BuiltinCoreInfo& info : BuiltinCores()) {
     if (core_id == info.id) {
       return CreateWithInterface(*info.get_interface(),
                                  std::string("builtin:") + info.id, nullptr,
-                                 error);
+                                 error, dirs);
     }
   }
   SetError(error, "unknown built-in core '" + core_id + "'");
@@ -242,6 +251,11 @@ void LibretroHost::SetSystemDirectory(const std::string& dir) {
 void LibretroHost::SetSaveDirectory(const std::string& dir) {
   std::lock_guard<std::recursive_mutex> lock(core_mutex_);
   save_dir_ = dir;
+}
+
+void LibretroHost::SetCacheDirectory(const std::string& dir) {
+  std::lock_guard<std::recursive_mutex> lock(core_mutex_);
+  cache_dir_ = dir;
 }
 
 void LibretroHost::SetLogCallback(LogCallback cb) {
@@ -366,8 +380,13 @@ bool LibretroHost::LoadGameFromMemory(const std::string& virtual_path,
                                    : virtual_path.substr(slash + 1);
       const size_t dot = base.find_last_of('.');
       const std::string ext = dot == std::string::npos ? "" : base.substr(dot);
-      const char* env_tmp = std::getenv("TMPDIR");
-      std::string dir = (env_tmp && env_tmp[0]) ? env_tmp : "/tmp";
+      // Never fall back to /tmp (absent on Android): use the injected cache dir.
+      std::string dir = !cache_dir_.empty() ? cache_dir_ : save_dir_;
+      if (dir.empty()) {
+        SetError(error, "no cache directory for a full-path core");
+        rom_data_.clear();
+        return false;
+      }
       while (dir.size() > 1 && dir.back() == '/') dir.pop_back();
       std::string tmpl = dir + "/delta_rom_XXXXXX";
       std::vector<char> buf(tmpl.begin(), tmpl.end());
@@ -736,20 +755,20 @@ bool LibretroHost::Environment(unsigned cmd, void* data) {
       if (!data) return false;
       if (!system_dir_.empty()) {
         *static_cast<const char**>(data) = system_dir_.c_str();
+      } else if (!cache_dir_.empty()) {
+        *static_cast<const char**>(data) = cache_dir_.c_str();
       } else {
-        const char* env_tmp = std::getenv("TMPDIR");
-        *static_cast<const char**>(data) =
-            (env_tmp && env_tmp[0]) ? env_tmp : "/tmp";
+        return false;
       }
       return true;
     case RETRO_ENVIRONMENT_GET_SAVE_DIRECTORY:
       if (!data) return false;
       if (!save_dir_.empty()) {
         *static_cast<const char**>(data) = save_dir_.c_str();
+      } else if (!cache_dir_.empty()) {
+        *static_cast<const char**>(data) = cache_dir_.c_str();
       } else {
-        const char* env_tmp = std::getenv("TMPDIR");
-        *static_cast<const char**>(data) =
-            (env_tmp && env_tmp[0]) ? env_tmp : "/tmp";
+        return false;
       }
       return true;
     case RETRO_ENVIRONMENT_GET_LIBRETRO_PATH:
@@ -967,4 +986,4 @@ bool LibretroHost::RumbleThunk(unsigned port, enum retro_rumble_effect effect,
   return true;
 }
 
-}  // namespace lemuroid
+}  // namespace delta

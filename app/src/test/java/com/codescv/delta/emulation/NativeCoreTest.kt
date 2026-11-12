@@ -39,6 +39,58 @@ class NativeCoreTest {
 
     private fun requireNative() = assumeTrue("host JNI library not built", available)
 
+    private val tmpRoot by lazy { java.nio.file.Files.createTempDirectory("delta-native").toFile() }
+
+    private fun create(id: String): Long {
+        val sys = java.io.File(tmpRoot, "System").apply { mkdirs() }
+        val save = java.io.File(tmpRoot, "Saves").apply { mkdirs() }
+        val cache = java.io.File(tmpRoot, "cache").apply { mkdirs() }
+        return NativeBridge.nativeCreate(id, sys.absolutePath, save.absolutePath, cache.absolutePath)
+    }
+
+    @Test
+    fun directoriesAreInjectedBeforeInitAndNeverTmp() {
+        requireNative()
+        for (id in listOf("ds", "n64", "genesis", "gba")) {
+            val h = create(id)
+            try {
+                assertEquals(java.io.File(tmpRoot, "System").absolutePath, NativeBridge.nativeQueryDirectory(h, 0))
+                assertEquals(java.io.File(tmpRoot, "Saves").absolutePath, NativeBridge.nativeQueryDirectory(h, 1))
+                assertEquals(java.io.File(tmpRoot, "System").absolutePath, NativeBridge.nativeQueryDirectory(h, 2))
+            } finally {
+                NativeBridge.nativeDestroy(h)
+            }
+        }
+        // Without directories the host refuses instead of inventing /tmp.
+        val h = NativeBridge.nativeCreate("chip8", "", "", "")
+        try {
+            assertNull(NativeBridge.nativeQueryDirectory(h, 0))
+            assertNull(NativeBridge.nativeQueryDirectory(h, 1))
+        } finally {
+            NativeBridge.nativeDestroy(h)
+        }
+    }
+
+    @Test
+    fun renderAudioInterleavesPcm16ThroughResampler() {
+        requireNative()
+        val h = create("chip8")
+        try {
+            assertNull(NativeBridge.nativeLoadGameData(h, CHIP8_ROM, "/virtual/test.ch8"))
+            NativeBridge.nativeRunFrames(h, 30, false)
+            val pcm = ShortArray(240 * 2)
+            assertEquals(240, NativeBridge.nativeRenderAudio(h, pcm, 240, 48000.0))
+            // Capacity is respected.
+            assertEquals(10, NativeBridge.nativeRenderAudio(h, ShortArray(20), 240, 48000.0))
+            NativeBridge.nativeSetAudioMuted(h, true)
+            val muted = ShortArray(64)
+            NativeBridge.nativeRenderAudio(h, muted, 32, 48000.0)
+            assertTrue(muted.all { it.toInt() == 0 })
+        } finally {
+            NativeBridge.nativeDestroy(h)
+        }
+    }
+
     @Test
     fun allBuiltinCoresAreRegistered() {
         requireNative()
@@ -56,7 +108,7 @@ class NativeCoreTest {
             "genesis" to "Genesis Plus GX", "ds" to "melonDS", "n64" to "ParaLLEl N64", "chip8" to "",
         )
         for ((id, name) in expectedNames) {
-            val h = NativeBridge.nativeCreate(id)
+            val h = create(id)
             assertTrue(h != 0L)
             val info = NativeBridge.nativeCoreInfo(h)
             assertNotNull(info[0])
@@ -68,15 +120,15 @@ class NativeCoreTest {
     @Test(expected = IllegalStateException::class)
     fun unknownCoreThrows() {
         requireNative()
-        NativeBridge.nativeCreate("psx")
+        create("psx")
     }
 
     @Test
     fun onlyOneCoreAtATime() {
         requireNative()
-        val h = NativeBridge.nativeCreate("chip8")
+        val h = create("chip8")
         try {
-            NativeBridge.nativeCreate("gba")
+            create("gba")
             throw AssertionError("expected IllegalStateException")
         } catch (e: IllegalStateException) {
             assertTrue(e.message!!.contains("already running"))
@@ -88,7 +140,7 @@ class NativeCoreTest {
     @Test
     fun chip8RunsRendersSavesAndRestores() {
         requireNative()
-        val h = NativeBridge.nativeCreate("chip8")
+        val h = create("chip8")
         try {
             assertNull(NativeBridge.nativeLoadGameData(h, CHIP8_ROM, "/tmp/test.ch8"))
             assertTrue(NativeBridge.nativeGameLoaded(h))
@@ -110,7 +162,7 @@ class NativeCoreTest {
 
             val timing = NativeBridge.nativeTiming(h)
             assertTrue(timing[1] > 0 && timing[2] > 0)
-            val audio = FloatArray(512 * 2)
+            val audio = ShortArray(512 * 2)
             NativeBridge.nativeRenderAudio(h, audio, 512, 48000.0)
 
             val state = NativeBridge.nativeSaveState(h)
@@ -127,7 +179,7 @@ class NativeCoreTest {
     @Test
     fun joypadMaskAndLatch() {
         requireNative()
-        val h = NativeBridge.nativeCreate("chip8")
+        val h = create("chip8")
         try {
             NativeBridge.nativeLoadGameData(h, CHIP8_ROM, "/tmp/test.ch8")
             val mask = VirtualButton.mask(listOf(VirtualButton.A, VirtualButton.UP))
@@ -145,7 +197,7 @@ class NativeCoreTest {
     @Test
     fun gbaCoreRejectsGarbageAndReportsOptions() {
         requireNative()
-        val h = NativeBridge.nativeCreate("gba")
+        val h = create("gba")
         try {
             val options = NativeBridge.nativeCoreOptionsJson(h)
             assertTrue(options.startsWith("["))
@@ -163,10 +215,8 @@ class NativeCoreTest {
         val path = System.getProperty("delta.gbarom")?.takeIf { it.isNotBlank() } ?: System.getenv("DELTA_TEST_GBA_ROM")
         val rom = path?.let { java.io.File(it) }
         assumeTrue("no GBA test ROM", rom != null && rom.isFile)
-        val h = NativeBridge.nativeCreate("gba")
+        val h = create("gba")
         try {
-            val dir = java.nio.file.Files.createTempDirectory("delta-gba").toFile()
-            NativeBridge.nativeSetDirectories(h, dir.absolutePath, dir.absolutePath)
             assertNull(NativeBridge.nativeLoadGame(h, rom!!.absolutePath))
             NativeBridge.nativeRunFrames(h, 240, false)
             val geo = NativeBridge.nativeVideoGeometry(h)

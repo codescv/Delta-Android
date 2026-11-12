@@ -5,7 +5,7 @@
 #include <algorithm>
 #include <cstring>
 
-namespace lemuroid {
+namespace delta {
 namespace {
 
 size_t RoundUpPow2(size_t v) {
@@ -83,4 +83,4 @@ size_t AudioRingBuffer::AvailableToWrite() const {
   return capacity_ - AvailableToRead();
 }
 
-}  // namespace lemuroid
+}  // namespace delta

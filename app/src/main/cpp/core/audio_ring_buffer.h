@@ -1,14 +1,14 @@
 // Copyright 2026 Google LLC
 
-#ifndef EXPERIMENTAL_USERS_CHII_IOS_DELTA_CORE_AUDIO_RING_BUFFER_H_
-#define EXPERIMENTAL_USERS_CHII_IOS_DELTA_CORE_AUDIO_RING_BUFFER_H_
+#ifndef DELTA_CORE_AUDIO_RING_BUFFER_H_
+#define DELTA_CORE_AUDIO_RING_BUFFER_H_
 
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
 
-namespace lemuroid {
+namespace delta {
 
 class AudioRingBuffer {
  public:
@@ -47,6 +47,6 @@ class AudioRingBuffer {
   std::atomic<bool> flush_requested_{false};
 };
 
-}  // namespace lemuroid
+}  // namespace delta
 
-#endif  // EXPERIMENTAL_USERS_CHII_IOS_DELTA_CORE_AUDIO_RING_BUFFER_H_
+#endif  // DELTA_CORE_AUDIO_RING_BUFFER_H_

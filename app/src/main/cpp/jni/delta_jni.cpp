@@ -42,7 +42,7 @@
 
 namespace {
 
-using lemuroid::LibretroHost;
+using delta::LibretroHost;
 
 constexpr const char* kBridgeClass = "com/codescv/delta/emulation/NativeBridge";
 
@@ -110,7 +110,7 @@ std::string JsonEscape(const std::string& s) {
 // ---------------------------------------------------------------------------
 
 jobjectArray BuiltinCores(JNIEnv* env, jclass) {
-  const auto& cores = lemuroid::BuiltinCores();
+  const auto& cores = delta::BuiltinCores();
   jclass str = env->FindClass("java/lang/String");
   jobjectArray arr =
       env->NewObjectArray(static_cast<jsize>(cores.size() * 3), str, nullptr);
@@ -126,10 +126,14 @@ jobjectArray BuiltinCores(JNIEnv* env, jclass) {
 }
 
 // Returns a handle (> 0) or throws IllegalStateException with the error.
-jlong Create(JNIEnv* env, jclass, jstring core_id) {
+// Directories are applied before retro_init() (no /tmp fallback on Android).
+jlong Create(JNIEnv* env, jclass, jstring core_id, jstring system_dir,
+             jstring save_dir, jstring cache_dir) {
   std::string error;
   std::string id = ToStd(env, core_id);
-  auto host = LibretroHost::CreateBuiltin(id, &error);
+  delta::HostDirs dirs{ToStd(env, system_dir), ToStd(env, save_dir),
+                       ToStd(env, cache_dir)};
+  auto host = LibretroHost::CreateBuiltin(id, dirs, &error);
   if (!host) {
     jclass ex = env->FindClass("java/lang/IllegalStateException");
     env->ThrowNew(ex, ("cannot create core '" + id + "': " + error).c_str());
@@ -170,6 +174,19 @@ void SetDirectories(JNIEnv* env, jclass, jlong handle, jstring system_dir,
     h->SetSystemDirectory(ToStd(env, system_dir));
     h->SetSaveDirectory(ToStd(env, save_dir));
   }
+}
+
+// Returns what the core receives for GET_SYSTEM_DIRECTORY (which == 0),
+// GET_SAVE_DIRECTORY (1) or GET_CORE_ASSETS_DIRECTORY (2); null if refused.
+jstring QueryDirectory(JNIEnv* env, jclass, jlong handle, jint which) {
+  LibretroHost* h = HostOf(handle);
+  if (!h) return nullptr;
+  const unsigned cmd = which == 1   ? RETRO_ENVIRONMENT_GET_SAVE_DIRECTORY
+                       : which == 2 ? RETRO_ENVIRONMENT_GET_CORE_ASSETS_DIRECTORY
+                                    : RETRO_ENVIRONMENT_GET_SYSTEM_DIRECTORY;
+  const char* dir = nullptr;
+  if (!h->QueryEnvironment(cmd, &dir) || dir == nullptr) return nullptr;
+  return env->NewStringUTF(dir);
 }
 
 void SetOption(JNIEnv* env, jclass, jlong handle, jstring key, jstring value) {
@@ -363,26 +380,35 @@ jint CopyFrame(JNIEnv* env, jclass, jlong handle, jobject buffer) {
 // Audio (pulled by the Kotlin AudioTrack MODE_STREAM thread)
 // ---------------------------------------------------------------------------
 
-// Renders `frames` stereo frames of interleaved float PCM at `output_rate`.
-jint RenderAudio(JNIEnv* env, jclass, jlong handle, jfloatArray out,
+// Renders `frames` stereo frames as interleaved PCM16 at `output_rate`.
+// Always goes through AudioResampler::Render (planar float, +-0.5 % fill-rate
+// control, volume, mute, underrun fade) and then clamps/interleaves to int16.
+jint RenderAudio(JNIEnv* env, jclass, jlong handle, jshortArray out,
                  jint frames, jdouble output_rate) {
   Session* s = FromHandle(handle);
   if (!s || !s->host || !out || frames <= 0) return 0;
-  const size_t n = static_cast<size_t>(frames);
+  const jsize capacity = env->GetArrayLength(out);
+  size_t n = static_cast<size_t>(frames);
+  if (static_cast<size_t>(capacity) < n * 2) n = static_cast<size_t>(capacity) / 2;
+  if (n == 0) return 0;
   if (s->left.size() < n) {
     s->left.resize(n);
     s->right.resize(n);
   }
-  const size_t rendered = s->host->audio_resampler()->Render(
-      s->left.data(), s->right.data(), n, output_rate);
-  std::vector<float> interleaved(n * 2);
+  s->host->audio_resampler()->Render(s->left.data(), s->right.data(), n,
+                                     output_rate);
+  jshort* dst = env->GetShortArrayElements(out, nullptr);
+  if (!dst) return 0;
   for (size_t i = 0; i < n; ++i) {
-    interleaved[i * 2] = s->left[i];
-    interleaved[i * 2 + 1] = s->right[i];
+    float l = s->left[i] * 32767.0f;
+    float r = s->right[i] * 32767.0f;
+    l = l > 32767.0f ? 32767.0f : (l < -32768.0f ? -32768.0f : l);
+    r = r > 32767.0f ? 32767.0f : (r < -32768.0f ? -32768.0f : r);
+    dst[i * 2] = static_cast<jshort>(l);
+    dst[i * 2 + 1] = static_cast<jshort>(r);
   }
-  env->SetFloatArrayRegion(out, 0, static_cast<jsize>(n * 2),
-                           interleaved.data());
-  return static_cast<jint>(rendered);
+  env->ReleaseShortArrayElements(out, dst, 0);
+  return static_cast<jint>(n);
 }
 
 void SetAudioMuted(JNIEnv*, jclass, jlong handle, jboolean muted) {
@@ -469,7 +495,7 @@ jstring LoadSaveRam(JNIEnv* env, jclass, jlong handle, jbyteArray data) {
 jint Crc32(JNIEnv* env, jclass, jbyteArray data, jint offset, jint length) {
   if (!data || length <= 0) return 0;
   jbyte* p = env->GetByteArrayElements(data, nullptr);
-  const uint32_t crc = lemuroid::Crc32(p + offset, static_cast<size_t>(length));
+  const uint32_t crc = delta::Crc32(p + offset, static_cast<size_t>(length));
   env->ReleaseByteArrayElements(data, p, JNI_ABORT);
   return static_cast<jint>(crc);
 }
@@ -478,7 +504,7 @@ jint Crc32Update(JNIEnv* env, jclass, jint crc, jbyteArray data, jint offset,
                  jint length) {
   if (!data || length <= 0) return crc;
   jbyte* p = env->GetByteArrayElements(data, nullptr);
-  const uint32_t out = lemuroid::Crc32Update(static_cast<uint32_t>(crc),
+  const uint32_t out = delta::Crc32Update(static_cast<uint32_t>(crc),
                                              p + offset,
                                              static_cast<size_t>(length));
   env->ReleaseByteArrayElements(data, p, JNI_ABORT);
@@ -487,11 +513,14 @@ jint Crc32Update(JNIEnv* env, jclass, jint crc, jbyteArray data, jint offset,
 
 const JNINativeMethod kMethods[] = {
     {"nativeBuiltinCores", "()[Ljava/lang/String;", (void*)BuiltinCores},
-    {"nativeCreate", "(Ljava/lang/String;)J", (void*)Create},
+    {"nativeCreate",
+     "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)J",
+     (void*)Create},
     {"nativeDestroy", "(J)V", (void*)Destroy},
     {"nativeCoreInfo", "(J)[Ljava/lang/String;", (void*)CoreInfo},
     {"nativeSetDirectories", "(JLjava/lang/String;Ljava/lang/String;)V",
      (void*)SetDirectories},
+    {"nativeQueryDirectory", "(JI)Ljava/lang/String;", (void*)QueryDirectory},
     {"nativeSetOption", "(JLjava/lang/String;Ljava/lang/String;)V",
      (void*)SetOption},
     {"nativeGetOption", "(JLjava/lang/String;)Ljava/lang/String;",
@@ -516,7 +545,7 @@ const JNINativeMethod kMethods[] = {
     {"nativeTiming", "(J)[D", (void*)Timing},
     {"nativeVideoSerial", "(J)J", (void*)VideoSerial},
     {"nativeCopyFrame", "(JLjava/nio/ByteBuffer;)I", (void*)CopyFrame},
-    {"nativeRenderAudio", "(J[FID)I", (void*)RenderAudio},
+    {"nativeRenderAudio", "(J[SID)I", (void*)RenderAudio},
     {"nativeSetAudioMuted", "(JZ)V", (void*)SetAudioMuted},
     {"nativeSetAudioVolume", "(JF)V", (void*)SetAudioVolume},
     {"nativeQueuedAudioFrames", "(J)I", (void*)QueuedAudioFrames},

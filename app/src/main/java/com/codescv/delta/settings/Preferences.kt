@@ -58,6 +58,17 @@ data class AppPreferences(
     val ndsBiosMode: String = "builtin",
     val lastLibraryPage: String? = null,
     val updateCheckOnLaunch: Boolean = true,
+    // Android additions (design §5.5).
+    /** `light` | `medium` | `strong`. */
+    val hapticStrength: String = "medium",
+    val muteAudio: Boolean = false,
+    val autoFetchBoxArt: Boolean = true,
+    /** Physical gamepad -> player (1..4), keyed by InputDevice descriptor. */
+    val playerAssignments: Map<String, Int> = emptyMap(),
+    /** Per player ("1".."4"): RetroPad button name (VirtualButton.name) -> Android keycode. */
+    val gamepadMappings: Map<String, Map<String, Int>> = emptyMap(),
+    /** SAF tree URIs linked via "Link ROM Folder…". */
+    val linkedFolders: List<String> = emptyList(),
 ) {
     fun isExperimentalEnabled(key: String) = experimentalFeatures.firstOrNull { it.key == key }?.isEnabled ?: false
     fun experimentalOption(key: String, option: String) = experimentalFeatures.firstOrNull { it.key == key }?.options?.get(option)

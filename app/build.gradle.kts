@@ -189,6 +189,7 @@ dependencies {
 
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.kotlinx.serialization.json)
+    implementation(libs.coil.compose)
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.core)

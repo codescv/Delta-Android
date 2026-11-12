@@ -2,8 +2,8 @@
 //
 // Delta iOS: binary-compatible subset of the public libretro / DeltaCore C ABI.
 
-#ifndef EXPERIMENTAL_USERS_CHII_IOS_DELTA_CORE_LR_LIBRETRO_H_
-#define EXPERIMENTAL_USERS_CHII_IOS_DELTA_CORE_LR_LIBRETRO_H_
+#ifndef DELTA_CORE_LR_LIBRETRO_H_
+#define DELTA_CORE_LR_LIBRETRO_H_
 
 #include <limits.h>
 #include <stdbool.h>
@@ -222,4 +222,4 @@ typedef int16_t (*retro_input_state_t)(unsigned port, unsigned device,
 }  // extern "C"
 #endif
 
-#endif  // EXPERIMENTAL_USERS_CHII_IOS_DELTA_CORE_LR_LIBRETRO_H_
+#endif  // DELTA_CORE_LR_LIBRETRO_H_

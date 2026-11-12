@@ -1,7 +1,7 @@
 // Copyright 2026 Google LLC
 
-#ifndef EXPERIMENTAL_USERS_CHII_IOS_DELTA_CORE_CHIP8_LIBRETRO_H_
-#define EXPERIMENTAL_USERS_CHII_IOS_DELTA_CORE_CHIP8_LIBRETRO_H_
+#ifndef DELTA_CORE_CHIP8_LIBRETRO_H_
+#define DELTA_CORE_CHIP8_LIBRETRO_H_
 
 #include "core/lr_core_interface.h"
 
@@ -33,4 +33,4 @@ const lr_core_interface* lr_builtin_genesis_core(void);
 }  // extern "C"
 #endif
 
-#endif  // EXPERIMENTAL_USERS_CHII_IOS_DELTA_CORE_CHIP8_LIBRETRO_H_
+#endif  // DELTA_CORE_CHIP8_LIBRETRO_H_

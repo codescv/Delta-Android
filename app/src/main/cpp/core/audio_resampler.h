@@ -1,7 +1,7 @@
 // Copyright 2026 Google LLC
 
-#ifndef EXPERIMENTAL_USERS_CHII_IOS_DELTA_CORE_AUDIO_RESAMPLER_H_
-#define EXPERIMENTAL_USERS_CHII_IOS_DELTA_CORE_AUDIO_RESAMPLER_H_
+#ifndef DELTA_CORE_AUDIO_RESAMPLER_H_
+#define DELTA_CORE_AUDIO_RESAMPLER_H_
 
 #include <atomic>
 #include <cstddef>
@@ -9,7 +9,7 @@
 
 #include "core/audio_ring_buffer.h"
 
-namespace lemuroid {
+namespace delta {
 
 class AudioResampler {
  public:
@@ -52,6 +52,6 @@ class AudioResampler {
   bool starved_ = true;
 };
 
-}  // namespace lemuroid
+}  // namespace delta
 
-#endif  // EXPERIMENTAL_USERS_CHII_IOS_DELTA_CORE_AUDIO_RESAMPLER_H_
+#endif  // DELTA_CORE_AUDIO_RESAMPLER_H_

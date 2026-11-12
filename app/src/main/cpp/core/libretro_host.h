@@ -1,7 +1,7 @@
 // Copyright 2026 Google LLC
 
-#ifndef EXPERIMENTAL_USERS_CHII_IOS_DELTA_CORE_LIBRETRO_HOST_H_
-#define EXPERIMENTAL_USERS_CHII_IOS_DELTA_CORE_LIBRETRO_HOST_H_
+#ifndef DELTA_CORE_LIBRETRO_HOST_H_
+#define DELTA_CORE_LIBRETRO_HOST_H_
 
 #include <array>
 #include <atomic>
@@ -19,7 +19,7 @@
 #include "core/lr_core_interface.h"
 #include "core/lr_libretro.h"
 
-namespace lemuroid {
+namespace delta {
 
 struct BuiltinCoreInfo {
   const char* id;
@@ -39,6 +39,14 @@ struct CoreOption {
   std::string default_value;
   std::string value;
   bool visible = true;
+};
+
+// Directories handed to the core. They must be known before retro_init(), since
+// melonDS / parallel-n64 / Genesis Plus GX query them during initialization.
+struct HostDirs {
+  std::string system_dir;
+  std::string save_dir;
+  std::string cache_dir;
 };
 
 struct VideoGeometry {
@@ -62,8 +70,11 @@ class LibretroHost {
 
   static std::unique_ptr<LibretroHost> CreateWithInterface(
       const lr_core_interface& core, const std::string& core_path,
-      void* dl_handle, std::string* error);
+      void* dl_handle, std::string* error, const HostDirs& dirs = HostDirs());
   static std::unique_ptr<LibretroHost> CreateBuiltin(const std::string& core_id,
+                                                     std::string* error);
+  static std::unique_ptr<LibretroHost> CreateBuiltin(const std::string& core_id,
+                                                     const HostDirs& dirs,
                                                      std::string* error);
   static std::unique_ptr<LibretroHost> CreateFromDynamicLibrary(
       const std::string& path, std::string* error);
@@ -79,6 +90,9 @@ class LibretroHost {
 
   void SetSystemDirectory(const std::string& dir);
   void SetSaveDirectory(const std::string& dir);
+  void SetCacheDirectory(const std::string& dir);
+  const std::string& system_directory() const { return system_dir_; }
+  const std::string& cache_directory() const { return cache_dir_; }
   void SetLogCallback(LogCallback cb);
   void SetRumbleCallback(RumbleCallback cb);
 
@@ -126,6 +140,10 @@ class LibretroHost {
 
   AudioRingBuffer* audio_ring() { return &audio_ring_; }
   AudioResampler* audio_resampler() { return &resampler_; }
+
+  // Answers a libretro environment query exactly as a core would see it
+  // (used by tests to verify directory injection).
+  bool QueryEnvironment(unsigned cmd, void* data) { return Environment(cmd, data); }
 
   bool SerializeState(std::vector<uint8_t>* out, std::string* error);
   bool UnserializeState(const uint8_t* data, size_t size, std::string* error);
@@ -175,6 +193,7 @@ class LibretroHost {
 
   std::string system_dir_;
   std::string save_dir_;
+  std::string cache_dir_;
   std::string game_path_;
   std::string temp_rom_path_;
   std::vector<uint8_t> rom_data_;
@@ -225,6 +244,6 @@ class LibretroHost {
   AudioResampler resampler_;
 };
 
-}  // namespace lemuroid
+}  // namespace delta
 
-#endif  // EXPERIMENTAL_USERS_CHII_IOS_DELTA_CORE_LIBRETRO_HOST_H_
+#endif  // DELTA_CORE_LIBRETRO_HOST_H_
