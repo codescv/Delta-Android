@@ -4,6 +4,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import com.codescv.delta.DeltaApplication
 import com.codescv.delta.model.GameSystem
+import com.codescv.delta.skins.procedural.ProceduralSkin
+import com.codescv.delta.skins.procedural.ProceduralSkinLayout
+import com.codescv.delta.skins.procedural.RenderedSkinPreview
+import com.codescv.delta.skins.procedural.SystemSkinCatalog
+import com.codescv.delta.skins.procedural.VariantSkinPreview
 
 /** One selectable controller skin for a skin family (official, built-in variant or imported). */
 data class SkinOption(
@@ -38,11 +43,13 @@ object SkinCatalog {
         "gba" -> "Game Boy Advance"
         "nds" -> "Nintendo DS"
         "genesis" -> "Sega Genesis"
+        "chip8" -> "CHIP-8"
         else -> family.uppercase()
     }
 
     fun familyShortName(family: String): String = when (family) {
         "nes" -> "NES"; "snes" -> "SNES"; "n64" -> "N64"; "gbc" -> "GBC"; "gba" -> "GBA"; "nds" -> "DS"; "genesis" -> "MD"
+        "chip8" -> "CHIP-8"
         else -> family.uppercase()
     }
 
@@ -53,6 +60,7 @@ object SkinCatalog {
         "gbc" -> GameSystem.GBC
         "nds" -> GameSystem.NDS
         "genesis" -> GameSystem.GENESIS
+        "chip8" -> GameSystem.CHIP8
         else -> GameSystem.GBA
     }
 
@@ -71,10 +79,40 @@ object SkinCatalog {
         options(family).firstOrNull { it.id == id } ?: options(family).first()
 }
 
-/** Built-in procedural skin variants (owned by the `skin-variants` helper). */
+/**
+ * Built-in procedural skin variants: Delta's `SystemSkinCatalog` (palettes, badges, ids exactly
+ * as iOS, e.g. `gba-atomicPurple`, `nes-famicom`) drawn by [com.codescv.delta.skins.procedural.ProceduralSkinArtwork].
+ */
 object ProceduralSkins {
-    fun options(family: String): List<SkinOption> = emptyList()
+    /** Skin family of a system (`gb`→`gbc`, `sms`/`gg`→`genesis`, CHIP-8 → `chip8`). */
+    fun familyOf(system: GameSystem): String = system.skinSystem ?: "chip8"
 
+    /** All built-in variants of a family, default first. */
+    fun options(family: String): List<SkinOption> = SystemSkinCatalog.skins(family).map {
+        SkinOption(it.id, it.displayName, family, SkinOption.Kind.VARIANT, it.badge)
+    }
+
+    /** Whether [optionId] names a built-in variant of [family]. */
+    fun isVariant(optionId: String?, family: String): Boolean = SystemSkinCatalog.skin(optionId, family) != null
+
+    /** The built-in skin [optionId] for [system]'s family, falling back to the family default. */
+    fun skin(optionId: String?, system: GameSystem): ProceduralSkin? {
+        val family = familyOf(system)
+        return SystemSkinCatalog.skin(optionId, family) ?: SystemSkinCatalog.defaultSkin(family)
+    }
+
+    /**
+     * Lays out the procedural skin [optionId] (falling back to the family's default variant when
+     * the id isn't a built-in variant, e.g. CHIP-8 which has no official skin) in a
+     * [width] × [height] pixel container. Port of `ViewportLayout` + `ConsoleControlsLayout`:
+     * portrait = painted console shell with the game at the top; landscape = game aspect-fit
+     * full height with translucent controls on the sides.
+     *
+     * @param sourceWidth core video size, used for the aspect ratio (0 → system default).
+     * @param density pixels per layout point (dp); defaults to the device density.
+     * @param topInset safe-area insets in pixels (status bar / cutout).
+     * @return null for an empty container.
+     */
     fun layout(
         optionId: String,
         system: GameSystem,
@@ -82,10 +120,26 @@ object ProceduralSkins {
         height: Float,
         sourceWidth: Float,
         sourceHeight: Float,
-    ): ProceduralLayout? = null
+        density: Float = ProceduralSkinLayout.systemDensity(),
+        topInset: Float = 0f,
+        bottomInset: Float = 0f,
+        leftInset: Float = 0f,
+        rightInset: Float = 0f,
+    ): ProceduralLayout? {
+        val skin = skin(optionId, system) ?: return null
+        return ProceduralSkinLayout.compute(
+            skin, system, width, height, sourceWidth, sourceHeight, density, topInset, bottomInset, leftInset, rightInset,
+        )
+    }
 }
 
 /** Thumbnail of a skin for pickers (Settings › Skins, pause menu "Controller Skin" chips). */
 @Composable
 fun SkinPreview(option: SkinOption, selected: Boolean, modifier: Modifier = Modifier) {
+    val variant = if (option.kind == SkinOption.Kind.VARIANT) SystemSkinCatalog.skin(option.id, option.family) else null
+    if (variant != null) {
+        VariantSkinPreview(variant, selected, modifier)
+    } else {
+        RenderedSkinPreview(option, selected, modifier)
+    }
 }
