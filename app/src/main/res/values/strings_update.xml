@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- In-app updater + Agent feedback strings (ported from the Lemuroid fork's update module). -->
+<resources>
+    <string name="update_row_title">Check for Updates</string>
+    <string name="update_check_title">Check for updates</string>
+    <string name="update_status_idle">Current version %1$s</string>
+    <string name="update_status_checking">Checking…</string>
+    <string name="update_status_up_to_date">Up to date (%1$s)</string>
+    <string name="update_status_available">New version %1$s available</string>
+    <string name="update_status_downloading">Downloading %1$s…</string>
+    <string name="update_status_downloaded">Version %1$s ready to install</string>
+    <string name="update_status_error">Check failed: %1$s</string>
+    <string name="update_available_title">Update available: %1$s</string>
+    <string name="update_current_latest">Current %1$s → Latest %2$s</string>
+    <string name="update_progress">%1$s / %2$s</string>
+    <string name="update_ready_to_install">Download complete. Tap Install to continue.</string>
+    <string name="update_action_update">Update</string>
+    <string name="update_action_retry">Retry</string>
+    <string name="update_action_install">Install</string>
+    <string name="update_action_later">Later</string>
+    <string name="update_action_cancel">Cancel</string>
+    <string name="update_action_ok">OK</string>
+    <string name="update_allow_unknown_sources">Allow \"Install unknown apps\" and return; installation will continue automatically</string>
+    <string name="update_error_network">Network error</string>
+    <string name="update_error_timeout">Connection timed out</string>
+    <string name="update_error_http">Server error</string>
+    <string name="update_error_rate_limited">GitHub API rate limit reached, please try again later</string>
+    <string name="update_error_not_found">No release found</string>
+    <string name="update_error_invalid_response">Invalid release information</string>
+    <string name="update_error_insecure_redirect">Refused an insecure (non-HTTPS) redirect</string>
+    <string name="update_error_too_many_redirects">Too many redirects</string>
+    <string name="update_error_corrupt">Downloaded APK is corrupt, incomplete or failed checksum verification</string>
+    <string name="update_error_wrong_package">APK package name does not match</string>
+    <string name="update_error_not_newer">APK version is not newer than the installed version</string>
+    <string name="update_error_signature_mismatch">Signed with a different key — uninstall Delta and install the downloaded APK manually</string>
+    <string name="update_error_no_apk">This release has no APK asset</string>
+    <string name="update_error_installer">Cannot start package installer</string>
+
+    <string name="agent_feedback_title">反馈给 Agent</string>
+    <string name="agent_feedback_subtitle_unset">Configure Agent feedback email and send one-click feedback</string>
+    <string name="agent_feedback_subtitle_configured">Send feedback to %1$s</string>
+    <string name="agent_feedback_dialog_title">反馈给 Agent</string>
+    <string name="agent_feedback_subject_preview">Subject: %1$s</string>
+    <string name="agent_feedback_email_label">Agent Feedback Email</string>
+    <string name="agent_feedback_email_hint">Stored locally on this device only</string>
+    <string name="agent_feedback_email_invalid">Please enter a valid email address</string>
+    <string name="agent_feedback_email_saved">Agent feedback email saved</string>
+    <string name="agent_feedback_summary_label">Title</string>
+    <string name="agent_feedback_summary_placeholder">Brief description of issue or feature request</string>
+    <string name="agent_feedback_summary_required">Please enter a title, an issue description, or add an image</string>
+    <string name="agent_feedback_details_label">Issue description</string>
+    <string name="agent_feedback_details_placeholder">Steps to reproduce or expected behavior</string>
+    <string name="agent_feedback_add_image">Add image</string>
+    <string name="agent_feedback_change_image">Change image</string>
+    <string name="agent_feedback_remove_image">Remove image</string>
+    <string name="agent_feedback_image_attach_failed">Unable to attach the selected image</string>
+    <string name="agent_feedback_action_save_email">Save Email</string>
+    <string name="agent_feedback_action_send">Send Feedback</string>
+    <string name="agent_feedback_action_cancel">Cancel</string>
+    <string name="agent_feedback_no_email_app">No email app found on this device</string>
+</resources>

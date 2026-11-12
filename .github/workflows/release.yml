@@ -1,0 +1,136 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools platforms;android-35 build-tools;35.0.0 ndk;27.0.12077973 cmake;3.22.1'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Decode release keystore
+        env:
+          DELTA_KEYSTORE_B64: ${{ secrets.DELTA_KEYSTORE_B64 }}
+          DELTA_KEYSTORE_PASSWORD: ${{ secrets.DELTA_KEYSTORE_PASSWORD }}
+          DELTA_KEY_ALIAS: ${{ secrets.DELTA_KEY_ALIAS }}
+          DELTA_KEY_PASSWORD: ${{ secrets.DELTA_KEY_PASSWORD }}
+        run: |
+          if [ -n "${DELTA_KEYSTORE_B64}" ]; then
+            echo "${DELTA_KEYSTORE_B64}" | base64 --decode > "${RUNNER_TEMP}/release.keystore"
+            {
+              echo "DELTA_KEYSTORE=${RUNNER_TEMP}/release.keystore"
+              echo "DELTA_KEYSTORE_PASSWORD=${DELTA_KEYSTORE_PASSWORD}"
+              echo "DELTA_KEY_ALIAS=${DELTA_KEY_ALIAS}"
+              echo "DELTA_KEY_PASSWORD=${DELTA_KEY_PASSWORD}"
+            } >> "${GITHUB_ENV}"
+            echo "Release keystore configured."
+          else
+            echo "::warning::DELTA_KEYSTORE_B64 is not set; release APKs fall back to debug signing."
+          fi
+
+      - name: Build release APKs
+        run: |
+          chmod +x ./gradlew
+          ./gradlew assembleRelease --no-daemon \
+            -Dorg.gradle.jvmargs="-Xmx4g -XX:MaxMetaspaceSize=1g"
+
+      - name: Content gates
+        run: bash tools/ci_gates.sh
+
+      - name: Collect APKs and checksums
+        id: collect
+        run: |
+          set -euo pipefail
+          ver="${GITHUB_REF_NAME#v}"
+          echo "version=${ver}" >> "${GITHUB_OUTPUT}"
+          src="app/build/outputs/apk/release"
+          mkdir -p dist
+          ls -la "${src}"
+
+          first_match() {
+            # Print the first file matching the glob pattern, or nothing.
+            local f
+            for f in "$@"; do
+              if [ -f "$f" ]; then echo "$f"; return 0; fi
+            done
+            return 0
+          }
+
+          universal="$(first_match "${src}"/*universal*.apk)"
+          if [ -z "${universal}" ]; then
+            # No ABI splits configured: a single app-release.apk (or unsigned variant).
+            universal="$(first_match "${src}/app-release.apk" "${src}"/app-release*.apk)"
+          fi
+          if [ -z "${universal}" ]; then
+            echo "::error::No universal/release APK found in ${src}"
+            exit 1
+          fi
+          cp "${universal}" "dist/Delta-Android-v${ver}.apk"
+
+          arm64="$(first_match "${src}"/*arm64-v8a*.apk)"
+          if [ -n "${arm64}" ]; then
+            cp "${arm64}" "dist/Delta-Android-v${ver}-arm64-v8a.apk"
+          else
+            echo "No arm64-v8a split APK; skipping."
+          fi
+
+          x86_64="$(first_match "${src}"/*x86_64*.apk)"
+          if [ -n "${x86_64}" ]; then
+            cp "${x86_64}" "dist/Delta-Android-v${ver}-x86_64.apk"
+          else
+            echo "No x86_64 split APK; skipping."
+          fi
+
+          (cd dist && sha256sum *.apk > SHA256SUMS.txt)
+          cat dist/SHA256SUMS.txt
+
+          # Release notes: the "## [<ver>]" section of CHANGELOG.md.
+          notes="${RUNNER_TEMP}/release_notes.md"
+          if [ -f CHANGELOG.md ]; then
+            awk -v ver="${ver}" '
+              /^## \[/ {
+                if (found) exit
+                if (index($0, "## [" ver "]") == 1) { found = 1; next }
+              }
+              found && /^\[[^]]+\]: / { next }
+              found { print }
+            ' CHANGELOG.md > "${notes}"
+          else
+            : > "${notes}"
+          fi
+          if ! grep -q '[^[:space:]]' "${notes}"; then
+            echo "Delta for Android v${ver}. See CHANGELOG.md for details." > "${notes}"
+          fi
+          echo "notes=${notes}" >> "${GITHUB_OUTPUT}"
+          cat "${notes}"
+
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Delta for Android v${{ steps.collect.outputs.version }}
+          tag_name: ${{ github.ref_name }}
+          body_path: ${{ steps.collect.outputs.notes }}
+          files: dist/*
+          fail_on_unmatched_files: true
