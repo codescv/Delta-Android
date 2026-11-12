@@ -238,7 +238,13 @@ fun GameScreen(rom: RomEntry, resumeStateId: String?, navigator: DeltaNavigator)
         val s = EmulatorSession(
             rom = rom,
             saves = container.saves,
-            systemDirectory = container.systemDir,
+            // melonDS picks up bios7/bios9/firmware from the system dir when present; "Built-in
+            // BIOS" mode hands it an empty directory so the built-in BIOS is always used.
+            systemDirectory = if (rom.system == GameSystem.NDS && p.ndsBiosMode != "external") {
+                java.io.File(container.systemDir, "builtin").apply { mkdirs() }
+            } else {
+                container.systemDir
+            },
             cacheDirectory = container.coreCacheDir,
             coreOptions = p.coreOptions[rom.system.coreId].orEmpty(),
             fastForwardMode = FastForwardMode.fromRaw(p.fastForwardMode),
