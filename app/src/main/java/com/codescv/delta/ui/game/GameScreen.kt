@@ -365,6 +365,7 @@ fun GameScreen(rom: RomEntry, resumeStateId: String?, navigator: DeltaNavigator)
     }
 
     BackHandler(enabled = !ui.menuVisible) { openMenu() }
+    BackHandler(enabled = ui.menuVisible) { closeMenu() }
 
     val haptics = remember(rom.id) { arrayOfNulls<HapticsController>(1) }
     DisposableEffect(rom.id) { onDispose { haptics[0]?.release() } }
