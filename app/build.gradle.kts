@@ -117,6 +117,7 @@ android {
                 layout.buildDirectory.file("hostjni/libdelta_core.so").get().asFile.absolutePath,
             )
             it.dependsOn("buildHostJni")
+            it.systemProperty("delta.requireHostJni", requireHostJni.toString())
             (project.findProperty("deltaGbaRom") as String?)?.let { rom -> it.systemProperty("delta.gbarom", rom) }
         }
     }
@@ -147,6 +148,10 @@ kotlin {
     }
 }
 
+// Host JNI must build (and NativeCoreTest must run) on CI or with -PrequireHostJni=true.
+val requireHostJni: Boolean =
+    (project.findProperty("requireHostJni") as String?)?.toBoolean() == true || System.getenv("CI") == "true"
+
 // Builds the same native engine (all cores + JNI bridge) for the host so JVM unit tests
 // can load it with System.load() and exercise real core loading / emulation.
 val sdkDir: String = run {
@@ -164,7 +169,7 @@ tasks.register<Exec>("configureHostJni") {
     outputs.file(File(out, "build.ninja"))
     doFirst { out.mkdirs() }
     workingDir = out
-    isIgnoreExitValue = true
+    isIgnoreExitValue = !requireHostJni
     commandLine(
         "$cmakeBin/cmake", "-G", "Ninja",
         "-DCMAKE_MAKE_PROGRAM=$cmakeBin/ninja",
@@ -183,7 +188,7 @@ tasks.register<Exec>("buildHostJni") {
     dependsOn("configureHostJni")
     val out = layout.buildDirectory.dir("hostjni").get().asFile
     workingDir = out
-    isIgnoreExitValue = true
+    isIgnoreExitValue = !requireHostJni
     inputs.dir("src/main/cpp")
     outputs.file(File(out, "libdelta_core.so"))
     commandLine("$sdkDir/cmake/3.22.1/bin/ninja", "delta_core")

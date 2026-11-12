@@ -62,6 +62,8 @@ class EmulatorSession(
     private var emuThread: Thread? = null
     private var audioThread: Thread? = null
     private val coreLock = ReentrantLock()
+    /** Guards `nativeRenderAudio` vs `nativeDestroy` so the audio thread never touches a freed Session. */
+    private val audioLock = Any()
 
     // Video ----------------------------------------------------------------------------------
     private val frameLock = Any()
@@ -297,7 +299,10 @@ class EmulatorSession(
                     track.write(silence, 0, silence.size, AudioTrack.WRITE_BLOCKING)
                     continue
                 }
-                val n = NativeBridge.nativeRenderAudio(h, buffer, frames, rate.toDouble())
+                val n = synchronized(audioLock) {
+                    val live = handle
+                    if (live != 0L) NativeBridge.nativeRenderAudio(live, buffer, frames, rate.toDouble()) else 0
+                }
                 if (n > 0) track.write(buffer, 0, n * 2, AudioTrack.WRITE_BLOCKING)
                 else track.write(silence, 0, silence.size, AudioTrack.WRITE_BLOCKING)
             }
@@ -342,9 +347,11 @@ class EmulatorSession(
         audioThread?.join(1500)
         emuThread = null
         audioThread = null
-        coreLock.withLock {
-            NativeBridge.nativeDestroy(handle)
-            handle = 0
+        synchronized(audioLock) {
+            coreLock.withLock {
+                NativeBridge.nativeDestroy(handle)
+                handle = 0
+            }
         }
         saves.markRunning(rom, false)
     }

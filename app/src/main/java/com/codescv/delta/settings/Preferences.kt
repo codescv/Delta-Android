@@ -95,7 +95,11 @@ object ExperimentalFeatures {
             "Dynamically reverse the order of screen inputFrames in controller skins. Can be used to “flip” between DS screens.",
         ),
         ExperimentalFeature("showTouches", "Show Touches", "Visually show touches. Useful for screen recordings and tutorials."),
-        ExperimentalFeature("metal", "Metal Renderer", "Use Metal to render games instead of OpenGL ES. Does not apply to N64 games.", isEnabled = true),
+        ExperimentalFeature(
+            "metal", "GPU Renderer",
+            "Use OpenGL ES hardware acceleration to render games instead of software rendering.",
+            isEnabled = true,
+        ),
         ExperimentalFeature(
             "Lu", "Lu",
             "Ask Lu questions about your games to receive helpful tips, strategies, and interesting facts tailored to the games you're playing.",
@@ -126,6 +130,7 @@ object ExperimentalFeatures {
         val byKey = saved.associateBy { it.key }
         return defaults().map { d ->
             val s = byKey[d.key] ?: return@map d
+            // Names / summaries always come from the canonical list; state from the saved one.
             d.copy(isEnabled = s.isEnabled, options = d.options + s.options.filterKeys { it in d.options })
         }
     }

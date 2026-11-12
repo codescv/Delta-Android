@@ -37,7 +37,14 @@ class NativeCoreTest {
         )
     }
 
-    private fun requireNative() = assumeTrue("host JNI library not built", available)
+    private fun requireNative() {
+        // On CI / -PrequireHostJni=true a missing host library is a failure, not a skip.
+        if (System.getProperty("delta.requireHostJni") == "true") {
+            assertTrue("host JNI library not built", available)
+        } else {
+            assumeTrue("host JNI library not built", available)
+        }
+    }
 
     private val tmpRoot by lazy { java.nio.file.Files.createTempDirectory("delta-native").toFile() }
 

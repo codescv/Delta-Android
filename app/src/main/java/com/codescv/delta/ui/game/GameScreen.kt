@@ -144,6 +144,9 @@ class GameUiState {
     var reverseScreens by mutableStateOf(false)
     var gamepadConnected by mutableStateOf(false)
     var gamepadName by mutableStateOf<String?>(null)
+    /** Incremented per published frame when the software renderer is active. */
+    var frameTick by mutableIntStateOf(0)
+    @Volatile var useGpu = true
 
     fun toast(text: String) {
         message = text
@@ -257,7 +260,7 @@ fun GameScreen(rom: RomEntry, resumeStateId: String?, navigator: DeltaNavigator)
         s.toastsEnabled = p.isExperimentalEnabled("toastNotifications")
         s.listener = object : EmulatorSession.Listener {
             override fun onFrame() {
-                glView[0]?.requestRender()
+                if (ui.useGpu) glView[0]?.requestRender() else ui.frameTick++
             }
             override fun onMessage(text: String) = ui.toast(text)
             override fun onFastForwardChanged(active: Boolean, multiplier: Int) {
@@ -283,7 +286,13 @@ fun GameScreen(rom: RomEntry, resumeStateId: String?, navigator: DeltaNavigator)
             GameInputRouter.handler = null
             val s = sessionHolder[0]
             sessionHolder[0] = null
-            if (s != null) container.ioScope.launch { s.stop() }
+            if (s != null) {
+                container.ioScope.launch {
+                    s.stop()
+                    // The auto save (and its screenshot) now exist: refresh Continue Playing.
+                    container.library.bumpCovers()
+                }
+            }
         }
     }
 
@@ -291,6 +300,20 @@ fun GameScreen(rom: RomEntry, resumeStateId: String?, navigator: DeltaNavigator)
     LaunchedEffect(session, prefs.volume, prefs.muteAudio, prefs.respectSilentMode) {
         session?.volume = prefs.volume.toFloat()
         session?.muted = prefs.muteAudio || isSilenced(context, prefs)
+    }
+    // Respect Silent Mode: react to ringer changes while playing (design §2.4).
+    DisposableEffect(session, prefs.respectSilentMode, prefs.muteAudio) {
+        val receiver = object : android.content.BroadcastReceiver() {
+            override fun onReceive(c: Context?, i: android.content.Intent?) {
+                val p = container.preferences.value
+                session?.muted = p.muteAudio || isSilenced(context, p)
+            }
+        }
+        val filter = android.content.IntentFilter(AudioManager.RINGER_MODE_CHANGED_ACTION)
+        androidx.core.content.ContextCompat.registerReceiver(
+            context, receiver, filter, androidx.core.content.ContextCompat.RECEIVER_NOT_EXPORTED,
+        )
+        onDispose { runCatching { context.unregisterReceiver(receiver) } }
     }
     LaunchedEffect(session, prefs.isExperimentalEnabled("toastNotifications")) {
         session?.toastsEnabled = prefs.isExperimentalEnabled("toastNotifications")
@@ -381,7 +404,8 @@ fun GameScreen(rom: RomEntry, resumeStateId: String?, navigator: DeltaNavigator)
         }
         val controllerVisible = !ui.gamepadConnected || prefs.alwaysShowTouchControls
         val thumbRadius = with(density) { 8.dp.toPx() }
-        val reverse = ui.reverseScreens
+        // More-sheet toggle XOR the experimental "Reverse Controller Skin Screens".
+        val reverse = ui.reverseScreens xor prefs.isExperimentalEnabled("reverseScreens")
         val skin = remember(
             rom.system, prefs.portraitSkinsBySystem, prefs.landscapeSkinsBySystem, portrait, widthPx, heightPx,
             sourceSize, topInset, controllerVisible, reverse,
@@ -398,8 +422,14 @@ fun GameScreen(rom: RomEntry, resumeStateId: String?, navigator: DeltaNavigator)
 
         // Everything the pause menu blurs: game screens (GL or frozen frame) + skin artwork.
         val blurModifier = if (ui.menuVisible && Build.VERSION.SDK_INT >= 31) Modifier.blur(24.dp) else Modifier
+        val gpu = prefs.isExperimentalEnabled("metal")
+        ui.useGpu = gpu
+        if (!gpu) glView[0] = null
         Box(Modifier.fillMaxSize().then(blurModifier)) {
-            AndroidView(
+            if (!gpu && ui.frozenFrame == null) {
+                SoftwareGameScreens(session, skin.quads, filter, ui.frameTick)
+            }
+            if (gpu) AndroidView(
                 factory = { ctx ->
                     GameSurfaceView(ctx).also { v ->
                         glView[0] = v
