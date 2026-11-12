@@ -1,6 +1,7 @@
 package com.codescv.delta.skins.procedural
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
@@ -79,7 +80,7 @@ fun ProceduralSkinArtwork(
         SystemSkinCatalog.skin(optionId, l.skin.family) ?: l.skin
     }
     val measurer = rememberTextMeasurer(cacheSize = 32)
-    Canvas(modifier.graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }) {
+    Canvas(modifier.fillMaxSize().graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }) {
         withTransform({ scale(l.density, l.density, pivot = Offset.Zero) }) {
             val painter = ArtworkPainter(this, measurer)
             if (l.portrait) {
