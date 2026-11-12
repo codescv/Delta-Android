@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Version 2.0.5 tracked the iOS Delta release this port is based on; later
 versions are Android-only updates.
 
+## [2.0.8] - 2026-11-12
+
+### Changed
+
+- Kept **检查更新 / Check for Updates** and **反馈给 Agent / Send Feedback** exclusively in
+  **Settings** (top **Support / 更新与反馈** section) and removed the duplicate rows from the
+  in-game Pause › **…** (`MoreOptionsSheet`) menu.
+
 ## [2.0.7] - 2026-11-12
 
 ### Changed

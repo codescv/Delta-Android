@@ -18,7 +18,7 @@ import com.codescv.delta.ui.components.FormRow
 import com.codescv.delta.ui.theme.DeltaColors
 
 /**
- * "检查更新 / Check for Updates" row (Settings top section and in-game Pause › … sheet). The
+ * "检查更新 / Check for Updates" row (Settings top section). The
  * subtitle mirrors [UpdateManager.state] and the trailing value shows the installed version;
  * tapping opens [UpdateDialog] and starts a check unless an update is already pending.
  */
@@ -62,7 +62,7 @@ private fun updateStatusText(
             stringResource(R.string.update_status_error, stringResource(UpdateManager.errorStringRes(state.code)))
     }
 
-/** "反馈给 Agent / Send Feedback" row + [AgentFeedbackDialog] (Settings and Pause › … sheet). */
+/** "反馈给 Agent / Send Feedback" row + [AgentFeedbackDialog] (Settings). */
 @Composable
 fun AgentFeedbackRow() {
     val context = LocalContext.current
