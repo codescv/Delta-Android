@@ -50,6 +50,13 @@ android {
 
     val keystorePath = System.getenv("DELTA_KEYSTORE")?.takeIf { it.isNotBlank() && file(it).isFile }
     signingConfigs {
+        // Checked-in key shared by local and CI builds so in-app updates keep the same signature.
+        getByName("debug") {
+            storeFile = file("debug.keystore")
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+        }
         if (keystorePath != null) {
             create("release") {
                 storeFile = file(keystorePath)
@@ -111,6 +118,16 @@ android {
             )
             it.dependsOn("buildHostJni")
             (project.findProperty("deltaGbaRom") as String?)?.let { rom -> it.systemProperty("delta.gbarom", rom) }
+        }
+    }
+
+    // Release: universal APK + per-ABI splits (design §1). Debug stays a single APK.
+    splits {
+        abi {
+            isEnable = gradle.startParameter.taskNames.any { it.contains("Release", ignoreCase = true) }
+            reset()
+            include("arm64-v8a", "x86_64")
+            isUniversalApk = true
         }
     }
 

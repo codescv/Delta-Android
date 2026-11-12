@@ -23,6 +23,7 @@ class GamepadTouchTracker(
         fun onQuickSave() {}
         fun onQuickLoad() {}
         fun onAnalog(x: Float, y: Float) {}
+        fun onRightAnalog(x: Float, y: Float) {}
         fun onPointer(x: Float?, y: Float?) {}
         fun onTouchPoints(points: List<Pair<Float, Float>>) {}
         fun onHaptic(kind: HapticKind) {}
@@ -44,6 +45,7 @@ class GamepadTouchTracker(
     private var currentQuickSave = false
     private var currentQuickLoad = false
     private var currentAnalog: Pair<Float, Float>? = null
+    private var currentRight: Pair<Float, Float> = 0f to 0f
     private var currentPointer: Pair<Float, Float>? = null
 
     val activePointerCount: Int get() = touches.size
@@ -93,6 +95,8 @@ class GamepadTouchTracker(
         var newQuickLoad = false
         var newAnalog: Pair<Float, Float>? = null
         var newPointer: Pair<Float, Float>? = null
+        var rx = 0f
+        var ry = 0f
         for (t in touches.values) {
             val hit = mapper.sample(t.x, t.y, t.lock)
             newButtons += hit.buttons
@@ -102,7 +106,10 @@ class GamepadTouchTracker(
             newQuickLoad = newQuickLoad || hit.quickLoad
             if (newAnalog == null && hit.analogX != null && hit.analogY != null) newAnalog = hit.analogX to hit.analogY
             if (newPointer == null && hit.pointerX != null && hit.pointerY != null) newPointer = hit.pointerX to hit.pointerY
+            rx += hit.rightX
+            ry += hit.rightY
         }
+        val newRight = rx.coerceIn(-1f, 1f) to ry.coerceIn(-1f, 1f)
         if (!hasStartSelect) {
             newButtons.remove(VirtualButton.START)
             newButtons.remove(VirtualButton.SELECT)
@@ -116,6 +123,8 @@ class GamepadTouchTracker(
         val oldPointer = currentPointer
         val oldQuickSave = currentQuickSave
         val oldQuickLoad = currentQuickLoad
+        val oldRight = currentRight
+        currentRight = newRight
         currentButtons = newButtons
         currentFastForward = newFF
         currentToggle = newToggle
@@ -132,7 +141,14 @@ class GamepadTouchTracker(
         if (newQuickLoad && !oldQuickLoad) l?.onQuickLoad()
         if (newAnalog != oldAnalog) l?.onAnalog(newAnalog?.first ?: 0f, newAnalog?.second ?: 0f)
         if (newPointer != oldPointer) l?.onPointer(newPointer?.first, newPointer?.second)
-        haptics(oldButtons, newButtons, oldFF || oldToggle || oldAnalog != null, newFF || newToggle || newAnalog != null)
+        if (newRight != oldRight) l?.onRightAnalog(newRight.first, newRight.second)
+        val oldRightActive = oldRight.first != 0f || oldRight.second != 0f
+        val newRightActive = newRight.first != 0f || newRight.second != 0f
+        haptics(
+            oldButtons, newButtons,
+            oldFF || oldToggle || oldAnalog != null || oldRightActive,
+            newFF || newToggle || newAnalog != null || newRightActive,
+        )
             ?.let { l?.onHaptic(it) }
     }
 

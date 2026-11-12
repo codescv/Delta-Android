@@ -176,6 +176,8 @@ class EmulatorSession(
         }
         val pacer = FramePacer(coreFps)
         var last = System.nanoTime()
+        var statsStart = last
+        var statsFrames = 0L
         val period = 1.0 / maxOf(coreFps, 1.0)
         while (running.get()) {
             val now = System.nanoTime()
@@ -195,6 +197,12 @@ class EmulatorSession(
                 }
                 publishFrame()
                 maybePersistSram(now)
+                statsFrames += frames
+                if (now - statsStart > 5_000_000_000L) {
+                    Log.i(TAG, "emulation %.1f fps (x%d)".format(statsFrames * 1e9 / (now - statsStart), speed))
+                    statsStart = now
+                    statsFrames = 0
+                }
             }
             val spent = (System.nanoTime() - now) / 1e9
             val sleep = maxOf(0.001, period / maxOf(speed, 1) - spent).coerceAtMost(period)
@@ -356,6 +364,22 @@ class EmulatorSession(
     fun setHardwareMask(mask: Int) {
         hardwareMask = mask
         pushMask()
+    }
+
+    /** Physical gamepad for [player] (1..4) → libretro port player-1. */
+    fun setPlayerMask(player: Int, mask: Int) {
+        if (player <= 1) {
+            setHardwareMask(mask)
+        } else {
+            val h = handle
+            if (h != 0L && player <= 4) NativeBridge.nativeSetJoypadMask(h, player - 1, mask)
+        }
+    }
+
+    fun setPlayerAnalog(player: Int, stick: Int, x: Float, y: Float) {
+        val h = handle
+        if (h == 0L || player !in 1..4) return
+        NativeBridge.nativeSetAnalog(h, player - 1, stick, (x.coerceIn(-1f, 1f) * 32767).toInt(), (y.coerceIn(-1f, 1f) * 32767).toInt())
     }
 
     fun toggleHeldButton(button: VirtualButton) {

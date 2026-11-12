@@ -74,6 +74,15 @@ object SkinCatalog {
 /** Built-in procedural skin variants (owned by the `skin-variants` helper). */
 object ProceduralSkins {
     fun options(family: String): List<SkinOption> = emptyList()
+
+    fun layout(
+        optionId: String,
+        system: GameSystem,
+        width: Float,
+        height: Float,
+        sourceWidth: Float,
+        sourceHeight: Float,
+    ): ProceduralLayout? = null
 }
 
 /** Thumbnail of a skin for pickers (Settings › Skins, pause menu "Controller Skin" chips). */

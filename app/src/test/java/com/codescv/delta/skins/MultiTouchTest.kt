@@ -167,6 +167,78 @@ class MultiTouchTest {
     }
 
     @Test
+    fun singleThumbBridgePressesAAndBInPortrait() {
+        val skin = DeltaSkin.parse("gba", TestAssets.text("ControllerSkins/gba_info.json"))
+        // 8 dp at density 2.625 (1080x2400 phone) = 21 px.
+        val l = DeltaSkinLayout.compute(skin, GameSystem.GBA, 1080f, 2400f, 240f, 160f, thumbRadius = 21f)!!
+        val a = l.items.first { it.item.inputs == listOf("a") }.extendedFrame
+        val b = l.items.first { it.item.inputs == listOf("b") }.extendedFrame
+        // A point just left of A and just above B: outside both extended frames, but within
+        // the 21 px bridge radius of each.
+        val x = a.minX - 15f
+        val y = b.minY - 10f
+        assertFalse(a.contains(x, y) || b.contains(x, y))
+        val s = l.sample(x, y, null)
+        assertEquals(setOf(VirtualButton.A, VirtualButton.B), s.buttons)
+        // Without the bridge radius the same point presses at most one of them.
+        val plain = DeltaSkinLayout.compute(skin, GameSystem.GBA, 1080f, 2400f, 240f, 160f)!!
+        assertTrue(plain.sample(x, y, null).buttons.size < 2)
+        // The circle never reaches Start/Select/Menu from B's position (non-face items keep point hits).
+        val start = l.items.first { it.item.inputs == listOf("start") }.extendedFrame
+        val probeX = start.maxX + 20f
+        val probeY = start.midY
+        assertFalse(VirtualButton.START in l.sample(probeX, probeY, null).buttons)
+        val bTouch = l.sample(b.midX, b.maxY - 1f, null)
+        assertFalse(VirtualButton.START in bTouch.buttons)
+    }
+
+    @Test
+    fun n64LeftStickAndCButtonsAreIndependent() {
+        val skin = DeltaSkin.parse("n64", TestAssets.text("ControllerSkins/n64_info.json"))
+        val l = DeltaSkinLayout.compute(skin, GameSystem.N64, 1080f, 2400f, 320f, 240f)!!
+        val t = GamepadTouchTracker(l)
+        var right = 0f to 0f
+        var left = 0f to 0f
+        t.listener = object : GamepadTouchTracker.Listener {
+            override fun onAnalog(x: Float, y: Float) { left = x to y }
+            override fun onRightAnalog(x: Float, y: Float) { right = x to y }
+        }
+        val stick = l.items.first { it.item.kind == DeltaSkin.ItemKind.THUMBSTICK }.frame
+        t.pointerDown(1, stick.maxX, stick.midY)
+        assertEquals(1f, left.first, 0.05f)
+        fun c(name: String) = l.items.firstOrNull { name in it.item.inputs }?.frame
+        val cUp = c("cUp")
+        val cRight = c("cRight")
+        if (cUp != null && cRight != null) {
+            t.pointerDown(2, cUp.midX, cUp.midY)
+            t.pointerDown(3, cRight.midX, cRight.midY)
+            assertEquals(1f, right.first, 0.001f)
+            assertEquals(-1f, right.second, 0.001f)
+            assertEquals(1f, left.first, 0.05f) // left stick still held
+            t.pointerUp(2)
+            t.pointerUp(3)
+            assertEquals(0f to 0f, right)
+        }
+        assertEquals(SkinAction.RightAnalog(0f, -1f), DeltaSkin.action("cUp", GameSystem.N64))
+        assertEquals(SkinAction.Button(VirtualButton.L), DeltaSkin.action("l", GameSystem.N64))
+    }
+
+    @Test
+    fun ndsReverseScreensSwapsInputFramesAndPointerFollows() {
+        val skin = DeltaSkin.parse("nds", TestAssets.text("ControllerSkins/nds_info.json"))
+        val normal = DeltaSkinLayout.compute(skin, GameSystem.NDS, 1080f, 2400f, 256f, 384f)!!
+        val reversed = DeltaSkinLayout.compute(skin, GameSystem.NDS, 1080f, 2400f, 256f, 384f, reverseScreens = true)!!
+        assertEquals(normal.screens[0].inputFrame, reversed.screens[1].inputFrame)
+        assertEquals(normal.screens[1].inputFrame, reversed.screens[0].inputFrame)
+        assertEquals(normal.screens[0].frame, reversed.screens[0].frame)
+        // The screen showing source rows 192..384 is now the top output frame; a pointer mapped
+        // through it lands in the lower half of the framebuffer (y > 0 normalized).
+        val touchScreen = reversed.screens.first { (it.inputFrame?.y ?: 0f) >= 192f }
+        val (_, py) = reversed.pointer(touchScreen.frame.midX, touchScreen.frame.midY, touchScreen.frame)
+        assertTrue("pointer y $py", py > 0f)
+    }
+
+    @Test
     fun ndsTouchScreenProducesPointer() {
         val skin = DeltaSkin.parse("nds", TestAssets.text("ControllerSkins/nds_info.json"))
         val l = DeltaSkinLayout.compute(skin, GameSystem.NDS, 1080f, 2400f, 256f, 384f)!!

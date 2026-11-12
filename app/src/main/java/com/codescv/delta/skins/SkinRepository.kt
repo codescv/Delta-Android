@@ -131,7 +131,10 @@ class SkinRepository(private val context: Context, private val skinsRoot: File) 
         val key = "${skin.source.id}|$fileName|${width}x$height"
         cache.get(key)?.let { return it }
         val bmp = try {
-            if (fileName.endsWith(".pdf", ignoreCase = true) || !fileName.contains('.')) {
+            val prerendered = (skin.source as? SkinSource.Bundled)?.let { prerendered(it.family, fileName, width, height) }
+            if (prerendered != null) {
+                prerendered
+            } else if (fileName.endsWith(".pdf", ignoreCase = true) || !fileName.contains('.')) {
                 val pdf = pdfFile(skin, if (fileName.contains('.')) fileName else "$fileName.pdf") ?: return null
                 renderPdf(pdf, width, height)
             } else {
@@ -145,6 +148,21 @@ class SkinRepository(private val context: Context, private val skinsRoot: File) 
         } ?: return null
         cache.put(key, bmp)
         return bmp
+    }
+
+    /**
+     * Bundled skins use build-time PNG renders (`tools/rasterize_skins.sh`, 4x, alpha preserved):
+     * Android's pdfium draws some soft-mask shadows (e.g. `gba_iphone_dpad.pdf`) with opaque
+     * corners, while the prerendered PNGs are pixel-exact. Imported skins keep [PdfRenderer].
+     */
+    private fun prerendered(family: String, fileName: String, width: Int, height: Int): Bitmap? {
+        if (!fileName.endsWith(".pdf", ignoreCase = true)) return null
+        val path = "ControllerSkins/prerendered/${family}_${fileName.removeSuffix(".pdf")}@4x.png"
+        val src = runCatching { context.assets.open(path).use { BitmapFactory.decodeStream(it) } }.getOrNull() ?: return null
+        if (src.width == width && src.height == height) return src
+        val scaled = Bitmap.createScaledBitmap(src, width, height, true)
+        if (scaled !== src) src.recycle()
+        return scaled
     }
 
     private fun openAsset(skin: LoadedSkin, fileName: String): InputStream? = when (val s = skin.source) {

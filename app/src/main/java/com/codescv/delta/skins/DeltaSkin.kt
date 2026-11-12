@@ -289,16 +289,17 @@ data class DeltaSkin(
                     else -> SkinAction.Ignored
                 }
                 GameSystem.N64 -> when (input) {
-                    // parallel-n64 RetroPad mapping: A=B, B=Y, Z=L2, R=R2, C-buttons on X/A/L/R.
+                    // parallel-n64: A=B, B=Y, Z=L2, L=L, R=R; C-buttons drive the right analog
+                    // stick (design §4: removes the iOS cLeft/l collision).
                     "a" -> SkinAction.Button(VirtualButton.B)
                     "b" -> SkinAction.Button(VirtualButton.Y)
                     "z" -> SkinAction.Button(VirtualButton.L2)
-                    "r" -> SkinAction.Button(VirtualButton.R2)
+                    "r" -> SkinAction.Button(VirtualButton.R)
                     "l" -> SkinAction.Button(VirtualButton.L)
-                    "cUp" -> SkinAction.Button(VirtualButton.X)
-                    "cDown" -> SkinAction.Button(VirtualButton.A)
-                    "cLeft" -> SkinAction.Button(VirtualButton.L)
-                    "cRight" -> SkinAction.Button(VirtualButton.R)
+                    "cUp" -> SkinAction.RightAnalog(0f, -1f)
+                    "cDown" -> SkinAction.RightAnalog(0f, 1f)
+                    "cLeft" -> SkinAction.RightAnalog(-1f, 0f)
+                    "cRight" -> SkinAction.RightAnalog(1f, 0f)
                     else -> SkinAction.Ignored
                 }
                 else -> when (input) {
@@ -322,6 +323,8 @@ sealed interface SkinAction {
     data object ToggleFastForward : SkinAction
     data object QuickSave : SkinAction
     data object QuickLoad : SkinAction
+    /** Right analog stick contribution (N64 C-buttons), components in -1..1. */
+    data class RightAnalog(val dx: Float, val dy: Float) : SkinAction
     data object Ignored : SkinAction
 }
 
@@ -333,9 +336,12 @@ data class GamepadTouchSample(
     val menu: Boolean = false,
     val quickSave: Boolean = false,
     val quickLoad: Boolean = false,
-    /** Analog deflection in -1..1 (x right, y down). */
+    /** Left analog deflection in -1..1 (x right, y down) from a thumbstick. */
     val analogX: Float? = null,
     val analogY: Float? = null,
+    /** Right analog contribution (N64 C-buttons); summed across pointers and clamped. */
+    val rightX: Float = 0f,
+    val rightY: Float = 0f,
     /** Touch-screen pointer in normalized core output coordinates (-1..1). */
     val pointerX: Float? = null,
     val pointerY: Float? = null,
@@ -358,6 +364,8 @@ data class DeltaSkinLayout(
     val screens: List<PlacedScreen>,
     val items: List<PlacedItem>,
     val sourceSize: SizeF,
+    /** Thumb-bridge radius in view pixels (8 dp on device). */
+    val thumbRadius: Float = 0f,
 ) : GamepadTouchMapper {
     data class PlacedItem(val item: DeltaSkin.Item, val frame: Box, val extendedFrame: Box)
     data class PlacedScreen(val frame: Box, val inputFrame: Box?)
@@ -376,9 +384,26 @@ data class DeltaSkinLayout(
             return acc.build()
         }
         for (placed in items) {
-            if (placed.extendedFrame.contains(x, y)) apply(placed, x, y, acc)
+            if (hits(placed, x, y)) apply(placed, x, y, acc)
         }
         return acc.build()
+    }
+
+    /**
+     * Point containment, except face buttons (`a/b/x/y/c` only) which are hit when their
+     * extended frame intersects a [thumbRadius] circle around the touch: a single thumb
+     * resting between A and B presses both (design §4 thumb-bridge rule).
+     */
+    private fun hits(placed: PlacedItem, x: Float, y: Float): Boolean {
+        val f = placed.extendedFrame
+        if (f.contains(x, y)) return true
+        if (thumbRadius <= 0f || placed.item.kind != DeltaSkin.ItemKind.BUTTONS) return false
+        if (placed.item.inputs.isEmpty() || !placed.item.inputs.all { it in FACE_INPUTS }) return false
+        val cx = x.coerceIn(f.minX, f.maxX)
+        val cy = y.coerceIn(f.minY, f.maxY)
+        val dx = x - cx
+        val dy = y - cy
+        return dx * dx + dy * dy <= thumbRadius * thumbRadius
     }
 
     override fun claims(x: Float, y: Float): Boolean =
@@ -395,7 +420,9 @@ data class DeltaSkinLayout(
         var ay: Float? = null
         var px: Float? = null
         var py: Float? = null
-        fun build() = GamepadTouchSample(buttons, holdFF, toggleFF, menu, quickSave, quickLoad, ax, ay, px, py)
+        var rx = 0f
+        var ry = 0f
+        fun build() = GamepadTouchSample(buttons, holdFF, toggleFF, menu, quickSave, quickLoad, ax, ay, rx, ry, px, py)
     }
 
     private fun apply(placed: PlacedItem, x: Float, y: Float, acc: SampleAccumulator) {
@@ -410,6 +437,10 @@ data class DeltaSkinLayout(
                     SkinAction.ToggleFastForward -> acc.toggleFF = true
                     SkinAction.QuickSave -> acc.quickSave = true
                     SkinAction.QuickLoad -> acc.quickLoad = true
+                    is SkinAction.RightAnalog -> {
+                        acc.rx = (acc.rx + a.dx).coerceIn(-1f, 1f)
+                        acc.ry = (acc.ry + a.dy).coerceIn(-1f, 1f)
+                    }
                     SkinAction.Ignored -> Unit
                 }
             }
@@ -460,6 +491,8 @@ data class DeltaSkinLayout(
     }
 
     companion object {
+        val FACE_INPUTS = setOf("a", "b", "x", "y", "c")
+
         /**
          * Lays out [skin] like DeltaCore's `GameViewController.viewDidLayoutSubviews`:
          * - Portrait without controller-placed screens: skin pinned to the bottom edge at full
@@ -476,6 +509,8 @@ data class DeltaSkinLayout(
             sourceHeight: Float,
             topInset: Float = 0f,
             controllerVisible: Boolean = true,
+            thumbRadius: Float = 0f,
+            reverseScreens: Boolean = false,
         ): DeltaSkinLayout? {
             val portrait = containerWidth <= containerHeight
             if (containerWidth <= 0f || containerHeight <= 0f) return null
@@ -518,12 +553,21 @@ data class DeltaSkinLayout(
                 screens += PlacedScreen(aspectFit(source, available).integral(), null)
             }
 
+            // Reverse Controller Skin Screens: swap the screens' inputFrames (output frames stay),
+            // so the bottom (touch) screen is drawn in the top cut-out and touches follow it.
+            if (reverseScreens && screens.size >= 2) {
+                val a = screens[0]
+                val b = screens[1]
+                screens[0] = a.copy(inputFrame = b.inputFrame)
+                screens[1] = b.copy(inputFrame = a.inputFrame)
+            }
+
             val items = if (controllerVisible) {
                 rep.items.map { PlacedItem(it, denormalize(it.frame, controllerFrame), denormalize(it.extendedFrame, controllerFrame)) }
             } else {
                 emptyList()
             }
-            return DeltaSkinLayout(system, skin, rep, controllerFrame, screens, items, source)
+            return DeltaSkinLayout(system, skin, rep, controllerFrame, screens, items, source, thumbRadius)
         }
 
         fun aspectFit(aspect: SizeF, rect: Box): Box {
