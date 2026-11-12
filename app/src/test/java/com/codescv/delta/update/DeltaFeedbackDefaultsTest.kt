@@ -11,10 +11,10 @@ class DeltaFeedbackDefaultsTest {
     @Test
     fun subjectUsesDeltaAndroidPrefixAndBuildVersion() {
         assertEquals("delta-android", AgentFeedbackHelper.PROJECT_PREFIX)
-        // Debug builds carry `-DEBUG`; the subject tag is always the release tag `v2.0.5`.
-        assertEquals("delta-android: [v2.0.5] Skin flicker", AgentFeedbackHelper.formatSubject("Skin flicker"))
+        // Debug builds carry `-DEBUG`; the subject tag is always the release tag `v2.0.6`.
+        assertEquals("delta-android: [v2.0.6] Skin flicker", AgentFeedbackHelper.formatSubject("Skin flicker"))
         assertEquals(
-            "delta-android: [v2.0.5] Skin flicker",
+            "delta-android: [v2.0.6] Skin flicker",
             AgentFeedbackHelper.formatSubject("Skin flicker", BuildConfig.VERSION_NAME),
         )
     }
@@ -35,7 +35,7 @@ class DeltaFeedbackDefaultsTest {
                 body = "Open pause menu a b",
             )
         assertEquals(
-            "mailto:agent@example.com?subject=delta-android%3A%20%5Bv2.0.5%5D%20Pause%20menu%20blur" +
+            "mailto:agent@example.com?subject=delta-android%3A%20%5Bv2.0.6%5D%20Pause%20menu%20blur" +
                 "&body=Open%20pause%20menu%20a%20b",
             uri,
         )
@@ -62,6 +62,6 @@ class DeltaFeedbackDefaultsTest {
         assertEquals("android.intent.action.SEND", spec.action)
         assertEquals("com.example.mail.Compose", spec.className)
         assertFalse(spec.hasSelector)
-        assertEquals("delta-android: [v2.0.5] Crash", spec.subject)
+        assertEquals("delta-android: [v2.0.6] Crash", spec.subject)
     }
 }

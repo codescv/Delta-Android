@@ -6,7 +6,7 @@ import com.codescv.delta.settings.ExperimentalFeature
 
 /** Static Settings content and pure helpers (ui_spec §6, design §5.5). */
 object SettingsData {
-    const val VERSION_STRING = "2.0.5 (Build 205)"
+    const val VERSION_STRING = "2.0.6 (Build 206)"
     const val FOOTER = "Delta $VERSION_STRING"
     const val GITHUB_FORK = "github.com/codescv/Delta-Android"
 

@@ -232,7 +232,7 @@ class AppUpdaterTest {
         assertEquals("https://api.github.com/repos/codescv/Delta-Android/releases/latest", reqUrl)
         assertEquals("application/vnd.github+json", reqHeaders["accept"])
         assertEquals("2022-11-28", reqHeaders["x-github-api-version"])
-        assertEquals("Delta-Android/2.0.5", reqHeaders["user-agent"])
+        assertEquals("Delta-Android/2.0.6", reqHeaders["user-agent"])
 
         // Same base version with -DEBUG suffix must NOT report an update.
         val debugSame = updater.checkLatestRelease("2.0.6-DEBUG")
@@ -366,7 +366,7 @@ class AppUpdaterTest {
         assertEquals(3, visitedUrls.size)
         assertEquals("https://objects.githubusercontent.com/production/delta.apk", visitedUrls.last())
         assertEquals("identity", cdnHeaders["accept-encoding"])
-        assertEquals("Delta-Android/2.0.5", cdnHeaders["user-agent"])
+        assertEquals("Delta-Android/2.0.6", cdnHeaders["user-agent"])
         assertNull(cdnHeaders["authorization"])
         assertEquals(validApkBytes.size.toLong(), progressUpdates.last().first)
 

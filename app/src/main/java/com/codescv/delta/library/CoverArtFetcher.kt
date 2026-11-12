@@ -249,7 +249,7 @@ class UrlConnectionHttpClient(
             conn.readTimeout = readTimeoutMs
             conn.instanceFollowRedirects = true
             conn.setRequestProperty("Accept", "image/png,image/jpeg,image/*")
-            conn.setRequestProperty("User-Agent", "Delta-Android/2.0.5")
+            conn.setRequestProperty("User-Agent", "Delta-Android/2.0.6")
             val code = conn.responseCode
             val body = if (code in 200..299) conn.inputStream.use { it.readBytes() } else ByteArray(0)
             return code to body

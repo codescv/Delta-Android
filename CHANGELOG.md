@@ -4,7 +4,18 @@ All notable changes to this project are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
-Version numbers track the iOS Delta release this port is based on.
+Version 2.0.5 tracked the iOS Delta release this port is based on; later
+versions are Android-only updates.
+
+## [2.0.6] - 2026-11-12
+
+### Fixed
+
+- **LCD Grid** video filter rewritten as a verbatim port of Lemuroid's
+  (LibretroDroid `ShaderConfig.LCD`) shader. The grid is now uniform: one soft cell
+  per game pixel, no moiré and no RGB subpixel colour fringes. Edge sharpness and grid
+  strength scale with the on-screen pixel size (`screenDensity`), so the grid fades out
+  on very small screens instead of beating.
 
 ## [2.0.5] - 2026-11-12
 
@@ -40,4 +51,5 @@ Initial Android release: a port of Delta 2.0.5 for iOS.
   release workflow publishing signed universal and per-ABI APKs with
   `SHA256SUMS.txt`.
 
+[2.0.6]: https://github.com/codescv/Delta-Android/releases/tag/v2.0.6
 [2.0.5]: https://github.com/codescv/Delta-Android/releases/tag/v2.0.5

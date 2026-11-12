@@ -109,7 +109,7 @@ class SettingsDataTest {
 
     @Test
     fun staticContentMatchesSpec() {
-        assertEquals("Delta 2.0.5 (Build 205)", SettingsData.FOOTER)
+        assertEquals("Delta 2.0.6 (Build 206)", SettingsData.FOOTER)
         assertEquals(listOf("167.86.108.126", "172.104.88.237", "178.62.43.212"), SettingsData.wfcServers.map { it.dns })
         assertEquals("Wiimmfi (167.86.108.126)", SettingsData.wfcTitle("167.86.108.126"))
         assertEquals(7, SettingsData.biosFiles.size)

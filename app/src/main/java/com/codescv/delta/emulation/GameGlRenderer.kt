@@ -20,7 +20,8 @@ data class ScreenQuad(val dest: Box, val source: Box?)
 /**
  * GLES2 renderer for the core's RGBA frame: one quad per skin screen (NDS: two sub-rects of
  * the single 256x384 texture), with a GLSL port of Delta's Metal shader
- * (0 Sharp Pixels / 1 LCD Grid / 2 CRT Scanlines / 3 Smooth Bilinear).
+ * (0 Sharp Pixels / 2 CRT Scanlines / 3 Smooth Bilinear). LCD Grid uses its own program: a
+ * verbatim copy of LibretroDroid's `ShaderConfig.LCD` (the shader Lemuroid ships).
  */
 class GameGlRenderer : GLSurfaceView.Renderer {
     @Volatile var session: EmulatorSession? = null
@@ -40,6 +41,12 @@ class GameGlRenderer : GLSurfaceView.Renderer {
     private var uTexSize = 0
     private var uOutSize = 0
     private var uMode = 0
+    private var lcdProgram = 0
+    private var lcdPos = 0
+    private var lcdCoord = 0
+    private var lcdTex = 0
+    private var lcdTexSize = 0
+    private var lcdDensity = 0
     private val vertices: FloatBuffer = ByteBuffer.allocateDirect(16 * 4).order(ByteOrder.nativeOrder()).asFloatBuffer()
 
     override fun onSurfaceCreated(gl: GL10?, config: EGLConfig?) {
@@ -50,6 +57,12 @@ class GameGlRenderer : GLSurfaceView.Renderer {
         uTexSize = GLES20.glGetUniformLocation(program, "uTexSize")
         uOutSize = GLES20.glGetUniformLocation(program, "uOutSize")
         uMode = GLES20.glGetUniformLocation(program, "uMode")
+        lcdProgram = buildProgram(LCD_VERTEX, LCD_FRAGMENT)
+        lcdPos = GLES20.glGetAttribLocation(lcdProgram, "vPosition")
+        lcdCoord = GLES20.glGetAttribLocation(lcdProgram, "vCoordinate")
+        lcdTex = GLES20.glGetUniformLocation(lcdProgram, "texture")
+        lcdTexSize = GLES20.glGetUniformLocation(lcdProgram, "textureSize")
+        lcdDensity = GLES20.glGetUniformLocation(lcdProgram, "screenDensity")
         val ids = IntArray(1)
         GLES20.glGenTextures(1, ids, 0)
         texture = ids[0]
@@ -88,16 +101,23 @@ class GameGlRenderer : GLSurfaceView.Renderer {
                 fh = bmp.height
             }
         }
-        if (fw == 0 || fh == 0 || program == 0) return
-        GLES20.glUseProgram(program)
+        if (fw == 0 || fh == 0) return
+        val lcd = filter == VideoFilter.LCD_GRID && lcdProgram != 0
+        if (!lcd && program == 0) return
         GLES20.glActiveTexture(GLES20.GL_TEXTURE0)
         GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, texture)
-        GLES20.glUniform1i(uTex, 0)
-        GLES20.glUniform1i(uMode, shaderMode(filter))
-        for (q in quads) drawQuad(q, fw, fh)
+        if (lcd) {
+            GLES20.glUseProgram(lcdProgram)
+            GLES20.glUniform1i(lcdTex, 0)
+        } else {
+            GLES20.glUseProgram(program)
+            GLES20.glUniform1i(uTex, 0)
+            GLES20.glUniform1i(uMode, shaderMode(filter))
+        }
+        for (q in quads) drawQuad(q, fw, fh, lcd)
     }
 
-    private fun drawQuad(q: ScreenQuad, fw: Int, fh: Int) {
+    private fun drawQuad(q: ScreenQuad, fw: Int, fh: Int, lcd: Boolean) {
         val src = q.source ?: Box(0f, 0f, fw.toFloat(), fh.toFloat())
         var d = q.dest
         if (integerScaling) d = integerScaled(d, src)
@@ -112,15 +132,23 @@ class GameGlRenderer : GLSurfaceView.Renderer {
         val y1 = 1f - d.maxY / viewH * 2f
         vertices.clear()
         vertices.put(floatArrayOf(x0, y1, u0, v1, x1, y1, u1, v1, x0, y0, u0, v0, x1, y0, u1, v0))
+        val posAttr = if (lcd) lcdPos else aPos
+        val uvAttr = if (lcd) lcdCoord else aUv
         vertices.position(0)
-        GLES20.glVertexAttribPointer(aPos, 2, GLES20.GL_FLOAT, false, 16, vertices)
-        GLES20.glEnableVertexAttribArray(aPos)
+        GLES20.glVertexAttribPointer(posAttr, 2, GLES20.GL_FLOAT, false, 16, vertices)
+        GLES20.glEnableVertexAttribArray(posAttr)
         vertices.position(2)
-        GLES20.glVertexAttribPointer(aUv, 2, GLES20.GL_FLOAT, false, 16, vertices)
-        GLES20.glEnableVertexAttribArray(aUv)
-        // Texel space of this screen's source rect (shader works per source pixel).
-        GLES20.glUniform2f(uTexSize, fw.toFloat(), fh.toFloat())
-        GLES20.glUniform2f(uOutSize, d.width * fw / src.width, d.height * fh / src.height)
+        GLES20.glVertexAttribPointer(uvAttr, 2, GLES20.GL_FLOAT, false, 16, vertices)
+        GLES20.glEnableVertexAttribArray(uvAttr)
+        if (lcd) {
+            // LibretroDroid: textureSize = core frame size, screenDensity = Video::getScreenDensity().
+            GLES20.glUniform2f(lcdTexSize, fw.toFloat(), fh.toFloat())
+            GLES20.glUniform1f(lcdDensity, screenDensity(d, src))
+        } else {
+            // Texel space of this screen's source rect (shader works per source pixel).
+            GLES20.glUniform2f(uTexSize, fw.toFloat(), fh.toFloat())
+            GLES20.glUniform2f(uOutSize, d.width * fw / src.width, d.height * fh / src.height)
+        }
         GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4)
     }
 
@@ -133,6 +161,14 @@ class GameGlRenderer : GLSurfaceView.Renderer {
             VideoFilter.CRT_SCANLINES -> 2
             VideoFilter.SMOOTH_BILINEAR -> 3
         }
+
+        /**
+         * Output pixels per core pixel, as LibretroDroid's `Video::getScreenDensity()`:
+         * `min(viewportW / frameW, viewportH / frameH)`. Drives the LCD shader's edge
+         * sharpness (`1 / screenDensity`) and grid strength (`smoothstep(2, 6, screenDensity)`).
+         */
+        fun screenDensity(dest: Box, src: Box): Float =
+            minOf(dest.width / src.width, dest.height / src.height).coerceAtLeast(1e-3f)
 
         /** Largest whole-number scale of [src] that fits in [dest], centered. */
         fun integerScaled(dest: Box, src: Box): Box {
@@ -175,14 +211,7 @@ class GameGlRenderer : GLSurfaceView.Renderer {
               vec2 f = (centerDist - clamp(centerDist, -region, region)) * scale + 0.5;
               vec3 color = texture2D(uTex, (base + f) / uTexSize).rgb;
               vec2 cell = fract(texel);
-              if (uMode == 1) {
-                float gx = smoothstep(0.0, 0.14, cell.x) * smoothstep(1.0, 0.86, cell.x);
-                float gy = smoothstep(0.0, 0.14, cell.y) * smoothstep(1.0, 0.86, cell.y);
-                color *= mix(0.62, 1.0, gx * gy);
-                float sub = cell.x * 3.0;
-                vec3 mask = sub < 1.0 ? vec3(1.0, 0.78, 0.78) : (sub < 2.0 ? vec3(0.78, 1.0, 0.78) : vec3(0.78, 0.78, 1.0));
-                color *= mix(vec3(1.0), mask, 0.45) * 1.12;
-              } else if (uMode == 2) {
+              if (uMode == 2) {
                 float d = cell.y - 0.5;
                 float scan = exp(-d * d * 10.0);
                 color *= mix(0.45, 1.15, scan);
@@ -193,6 +222,65 @@ class GameGlRenderer : GLSurfaceView.Renderer {
               gl_FragColor = vec4(clamp(color, 0.0, 1.0), 1.0);
             }
         """
+
+        /*
+         * LCD Grid = LibretroDroid 0.14.0 `ShaderManager::defaultShaderVertex` +
+         * `ShaderManager::lcdShaderFragment` (Lemuroid `ShaderConfig.LCD`), copied verbatim from
+         * liblibretrodroid.so, sampled with GL_LINEAR like LibretroDroid's LCD pass. The only
+         * addition is the leading default float precision, required by GLSL ES when the
+         * driver defines GL_FRAGMENT_PRECISION_HIGH (every value below is explicitly qualified).
+         */
+        internal const val LCD_VERTEX = """#ifdef GL_FRAGMENT_PRECISION_HIGH
+#define HIGHP highp
+#else
+#define HIGHP mediump
+precision mediump float;
+#endif
+attribute vec4 vPosition;
+attribute vec2 vCoordinate;
+uniform mediump float screenDensity;
+uniform lowp sampler2D texture;
+uniform vec2 textureSize;
+varying mediump float screenMaskStrength;
+varying HIGHP vec2 coords;
+varying HIGHP vec2 screenCoords;
+void main() {
+  coords = vCoordinate;
+  screenCoords = coords * textureSize;
+  screenMaskStrength = smoothstep(2.0, 6.0, screenDensity);
+  gl_Position = vPosition;
+}
+"""
+
+        internal const val LCD_FRAGMENT = """precision mediump float;
+#ifdef GL_FRAGMENT_PRECISION_HIGH
+#define HIGHP highp
+#else
+#define HIGHP mediump
+precision mediump float;
+#endif
+uniform HIGHP vec2 textureSize;
+uniform lowp sampler2D texture;
+uniform mediump float screenDensity;
+varying HIGHP vec2 coords;
+varying HIGHP vec2 screenCoords;
+varying mediump float screenMaskStrength;
+#define INTENSITY 0.25
+#define BRIGHTBOOST 0.25
+void main() {
+  mediump vec2 threshold = vec2(1.0 / screenDensity);
+  mediump vec2 x = fract(screenCoords);
+  x = 0.5 * (smoothstep(vec2(0.0), threshold, x) + smoothstep(vec2(1.0) - threshold, vec2(1.0), x));
+  mediump vec2 sharpCoords = (floor(screenCoords) + x) / textureSize;
+  lowp vec3 texel = texture2D(texture, sharpCoords).rgb;
+  lowp vec3 pixelHigh = ((1.0 + BRIGHTBOOST) - (0.2 * texel)) * texel;
+  lowp vec3 pixelLow  = ((1.0 - INTENSITY) + (0.1 * texel)) * texel;
+  HIGHP vec2 coords = fract(screenCoords) * 2.0 - vec2(1.0);
+  coords = coords * coords;
+  lowp float mask = 1.0 - coords.x - coords.y;
+  gl_FragColor = vec4(mix(texel, mix(pixelLow, pixelHigh, mask), screenMaskStrength), 1.0);
+}
+"""
 
         private fun compile(type: Int, src: String): Int {
             val shader = GLES20.glCreateShader(type)
