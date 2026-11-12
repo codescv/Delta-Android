@@ -189,10 +189,13 @@ fun BoxArtGlassPlaceholder() {
     }
 }
 
+/** A save-state screenshot plus its mtime (read off the main thread) for Coil cache-busting. */
+data class Thumbnail(val file: File, val lastModified: Long)
+
 /** Continue Playing card: latest save-state screenshot (128×72, r10) + title. */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun ContinueCard(rom: RomEntry, thumbnail: File?, onClick: () -> Unit, onLongClick: () -> Unit) {
+fun ContinueCard(rom: RomEntry, thumbnail: Thumbnail?, onClick: () -> Unit, onLongClick: () -> Unit) {
     val shape = RoundedCornerShape(10.dp)
     Column(
         Modifier
@@ -213,8 +216,16 @@ fun ContinueCard(rom: RomEntry, thumbnail: File?, onClick: () -> Unit, onLongCli
             contentAlignment = Alignment.Center,
         ) {
             if (thumbnail != null) {
+                val context = LocalContext.current
+                val request = remember(thumbnail) {
+                    // auto1/auto2.png are overwritten in place: key the memory cache by mtime.
+                    ImageRequest.Builder(context)
+                        .data(thumbnail.file)
+                        .memoryCacheKey("${thumbnail.file.path}#${thumbnail.lastModified}")
+                        .build()
+                }
                 AsyncImage(
-                    model = thumbnail,
+                    model = request,
                     contentDescription = null,
                     contentScale = ContentScale.Crop,
                     filterQuality = FilterQuality.None,

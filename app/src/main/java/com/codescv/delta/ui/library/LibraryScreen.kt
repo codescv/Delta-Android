@@ -119,7 +119,7 @@ private sealed interface PendingExport {
 private object LibrarySession {
     var selectedPageId: String? = null
     var covers: Map<String, File?> = emptyMap()
-    var screenshots: Map<String, File?> = emptyMap()
+    var screenshots: Map<String, Thumbnail?> = emptyMap()
 }
 
 /** Library root (design §5.1, ui_spec §2): the Delta 2.0.5 game browser. */
@@ -204,7 +204,9 @@ fun LibraryScreen(navigator: DeltaNavigator) {
     val continueEntries = remember(state) { LibraryLogic.continuePlaying(state) }
     val screenshots by produceState(LibrarySession.screenshots, continueEntries, state.coverRevision) {
         value = withContext(Dispatchers.IO) {
-            continueEntries.associate { it.id to runCatching { container.saves.latestScreenshot(it) }.getOrNull() }
+            continueEntries.associate { rom ->
+                rom.id to runCatching { container.saves.latestScreenshot(rom)?.let { Thumbnail(it, it.lastModified()) } }.getOrNull()
+            }
         }
         LibrarySession.screenshots = value
     }
