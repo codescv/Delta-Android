@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Version 2.0.5 tracked the iOS Delta release this port is based on; later
 versions are Android-only updates.
 
+## [2.0.9] - 2026-11-19
+
+### Changed
+
+- **Directional D-Pad press animation**: Pressing Up, Down, Left, Right, or diagonals on the D-Pad now produces distinct directional rocker tilt, per-arm shading/highlight, gliding radial glow, and animated directional arrows on both official `.deltaskin` skins (with or without a separate D-Pad asset) and built-in procedural console skins instead of a uniform highlight/scale.
+
 ## [2.0.8] - 2026-11-12
 
 ### Changed

@@ -1,8 +1,12 @@
 package com.codescv.delta.skins.procedural
 
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
@@ -18,11 +22,13 @@ import androidx.compose.ui.graphics.PathOperation
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.TextStyle
@@ -36,6 +42,8 @@ import androidx.compose.ui.unit.sp
 import com.codescv.delta.model.GameSystem
 import com.codescv.delta.model.VirtualButton
 import com.codescv.delta.skins.Box
+import com.codescv.delta.skins.DPadFeedback
+import com.codescv.delta.skins.DPadState
 import com.codescv.delta.skins.ProceduralLayout
 import kotlin.math.cos
 import kotlin.math.min
@@ -90,6 +98,14 @@ fun ProceduralSkinArtwork(
         SystemSkinCatalog.skin(optionId, l.skin.family) ?: l.skin
     }
     val measurer = rememberTextMeasurer(cacheSize = 32)
+    val dpadState = DPadState.fromButtons(pressed + held)
+    val dpadSpring = spring<Float>(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = 1200f)
+    val dpadAnimX by animateFloatAsState(dpadState.targetX, animationSpec = dpadSpring, label = "procDpadX")
+    val dpadAnimY by animateFloatAsState(dpadState.targetY, animationSpec = dpadSpring, label = "procDpadY")
+    val dpadUpWeight by animateFloatAsState(if (dpadState.up) 1f else 0f, animationSpec = dpadSpring, label = "procDpadUp")
+    val dpadDownWeight by animateFloatAsState(if (dpadState.down) 1f else 0f, animationSpec = dpadSpring, label = "procDpadDown")
+    val dpadLeftWeight by animateFloatAsState(if (dpadState.left) 1f else 0f, animationSpec = dpadSpring, label = "procDpadLeft")
+    val dpadRightWeight by animateFloatAsState(if (dpadState.right) 1f else 0f, animationSpec = dpadSpring, label = "procDpadRight")
     Canvas(modifier.fillMaxSize().graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }) {
         withTransform({ scale(l.density, l.density, pivot = Offset.Zero) }) {
             val painter = ArtworkPainter(this, measurer)
@@ -105,6 +121,9 @@ fun ProceduralSkinArtwork(
                     l.controls, system, skin, translucent = !l.portrait, pressed = pressed, held = held,
                     fastForwardActive = fastForwardActive, fastForwardMultiplier = fastForwardMultiplier,
                     fastForwardHeld = fastForwardHeld,
+                    dpadAnimX = dpadAnimX, dpadAnimY = dpadAnimY,
+                    dpadUpWeight = dpadUpWeight, dpadDownWeight = dpadDownWeight,
+                    dpadLeftWeight = dpadLeftWeight, dpadRightWeight = dpadRightWeight,
                 )
                 if (showHitBoxes) painter.drawHitBoxes(l.controls)
             }
@@ -392,10 +411,21 @@ private class ArtworkPainter(private val ds: DrawScope, private val measurer: Te
         fastForwardActive: Boolean,
         fastForwardMultiplier: Int,
         fastForwardHeld: Boolean,
+        dpadAnimX: Float = 0f,
+        dpadAnimY: Float = 0f,
+        dpadUpWeight: Float = 0f,
+        dpadDownWeight: Float = 0f,
+        dpadLeftWeight: Float = 0f,
+        dpadRightWeight: Float = 0f,
     ) {
         val p = skin.palette
         val gamepad = system.gamepadLayout
-        drawDPad(controls.dpad, p, translucent, pressed intersect VirtualButton.DPAD)
+        drawDPad(
+            controls.dpad, p, translucent,
+            animX = dpadAnimX, animY = dpadAnimY,
+            upWeight = dpadUpWeight, downWeight = dpadDownWeight,
+            leftWeight = dpadLeftWeight, rightWeight = dpadRightWeight,
+        )
 
         for ((button, rect) in controls.faceButtons.entries.sortedBy { it.key.retroId }) {
             val isHeld = button in held
@@ -482,8 +512,18 @@ private class ArtworkPainter(private val ds: DrawScope, private val measurer: Te
         }
     }
 
-    /** `DPadControl`: ring, cross, center dimple and four direction arrows. */
-    private fun drawDPad(rect: Box, p: SkinPalette, translucent: Boolean, active: Set<VirtualButton>) {
+    /** `DPadControl`: ring, rocking directional cross, center dimple and four direction arrows. */
+    private fun drawDPad(
+        rect: Box,
+        p: SkinPalette,
+        translucent: Boolean,
+        animX: Float,
+        animY: Float,
+        upWeight: Float,
+        downWeight: Float,
+        leftWeight: Float,
+        rightWeight: Float,
+    ) {
         val s = min(rect.width, rect.height)
         if (s <= 0f) return
         val cx = rect.midX
@@ -494,35 +534,88 @@ private class ArtworkPainter(private val ds: DrawScope, private val measurer: Te
         val vertical = Box(cx - arm / 2f, cy - s * 0.46f, arm, s * 0.92f)
         val horizontal = Box(cx - s * 0.46f, cy - arm / 2f, s * 0.92f, arm)
         val corner = s * 0.05f
-        shadow(0.4f, 3f, 2f) { inflate, dy, c ->
+        val tilt = DPadFeedback.computeTilt(rect, animX, animY, shiftFraction = 0.032f, compressFraction = 0.055f)
+        val shadowDx = -animX * s * 0.018f
+        val shadowDy = 2f - animY * s * 0.018f
+        shadow(0.4f - 0.10f * tilt.magnitude, 3f - 0.8f * tilt.magnitude, shadowDy) { inflate, dy, c ->
             for (b in listOf(vertical, horizontal)) {
-                roundRect(Box(b.x - inflate, b.y - inflate + dy, b.width + 2 * inflate, b.height + 2 * inflate), corner + inflate, c)
+                roundRect(
+                    Box(b.x - inflate + shadowDx, b.y - inflate + dy, b.width + 2 * inflate, b.height + 2 * inflate),
+                    corner + inflate,
+                    c,
+                )
             }
         }
         val capColor = p.cap.opacity(if (translucent) translucentAlpha(0.6f) else 1f)
         // One unioned path so translucent arms don't double up in the middle.
         fun rr(b: Box) = Path().apply { addRoundRect(RoundRect(b.x, b.y, b.maxX, b.maxY, CornerRadius(corner))) }
         val cross = Path().apply { op(rr(vertical), rr(horizontal), PathOperation.Union) }
-        ds.drawPath(cross, capColor)
-        dot(cx, cy, arm * 0.55f / 2f, p.capPressed.opacity(0.35f))
 
-        val triW = arm * 0.34f
-        val triH = arm * 0.26f
-        val distance = s * 0.33f
-        for ((dir, degrees) in listOf(
-            VirtualButton.UP to 0f, VirtualButton.RIGHT to 90f, VirtualButton.DOWN to 180f, VirtualButton.LEFT to 270f,
-        )) {
-            val color = (if (dir in active) p.active else p.capIcon).color
-            ds.rotate(degrees, pivot = Offset(cx, cy)) {
-                // Up-pointing triangle centered `distance` above the center, rotated into place.
-                translate(cx, cy - distance) {
-                    val tri = Path().apply {
-                        moveTo(0f, -triH / 2f)
-                        lineTo(triW / 2f, triH / 2f)
-                        lineTo(-triW / 2f, triH / 2f)
-                        close()
+        ds.withTransform({
+            translate(tilt.translateX, tilt.translateY)
+            scale(tilt.scaleX, tilt.scaleY, pivot = Offset(tilt.pivotX, tilt.pivotY))
+        }) {
+            drawPath(cross, capColor)
+            if (tilt.magnitude > 0.01f) {
+                val half = s * 0.46f
+                clipPath(cross) {
+                    // 3D rocker shading: pressed arm darkens as it dips, opposite arm catches highlight.
+                    drawRect(
+                        brush = Brush.linearGradient(
+                            colors = listOf(
+                                Color.White.copy(alpha = 0.20f * tilt.magnitude),
+                                Color.Transparent,
+                                Color.Black.copy(alpha = 0.34f * tilt.magnitude),
+                            ),
+                            start = Offset(cx - animX * half, cy - animY * half),
+                            end = Offset(cx + animX * half, cy + animY * half),
+                        ),
+                        topLeft = Offset(cx - half, cy - half),
+                        size = Size(half * 2f, half * 2f),
+                    )
+                    // Directional accent glow on the pressed side of the cross.
+                    val glowCenter = Offset(cx + animX * s * 0.30f, cy + animY * s * 0.30f)
+                    val glowRadius = s * 0.34f
+                    drawCircle(
+                        brush = Brush.radialGradient(
+                            colors = listOf(
+                                p.active.color.copy(alpha = 0.30f * tilt.magnitude),
+                                Color.Transparent,
+                            ),
+                            center = glowCenter,
+                            radius = glowRadius,
+                        ),
+                        radius = glowRadius,
+                        center = glowCenter,
+                    )
+                }
+            }
+            dot(cx + animX * s * 0.012f, cy + animY * s * 0.012f, arm * 0.55f / 2f, p.capPressed.opacity(0.35f))
+
+            val baseTriW = arm * 0.34f
+            val baseTriH = arm * 0.26f
+            val baseDistance = s * 0.33f
+            for ((degrees, weight) in listOf(
+                0f to upWeight,
+                90f to rightWeight,
+                180f to downWeight,
+                270f to leftWeight,
+            )) {
+                val triW = baseTriW * (1f + 0.22f * weight)
+                val triH = baseTriH * (1f + 0.22f * weight)
+                val distance = baseDistance + s * 0.018f * weight
+                val color = lerp(p.capIcon.color, p.active.color, weight.coerceIn(0f, 1f))
+                rotate(degrees, pivot = Offset(cx, cy)) {
+                    // Up-pointing triangle centered `distance` above the center, rotated into place.
+                    translate(cx, cy - distance) {
+                        val tri = Path().apply {
+                            moveTo(0f, -triH / 2f)
+                            lineTo(triW / 2f, triH / 2f)
+                            lineTo(-triW / 2f, triH / 2f)
+                            close()
+                        }
+                        drawPath(tri, color)
                     }
-                    drawPath(tri, color)
                 }
             }
         }
