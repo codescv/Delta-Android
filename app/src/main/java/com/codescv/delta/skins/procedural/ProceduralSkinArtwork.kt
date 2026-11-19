@@ -534,7 +534,7 @@ private class ArtworkPainter(private val ds: DrawScope, private val measurer: Te
         val vertical = Box(cx - arm / 2f, cy - s * 0.46f, arm, s * 0.92f)
         val horizontal = Box(cx - s * 0.46f, cy - arm / 2f, s * 0.92f, arm)
         val corner = s * 0.05f
-        val tilt = DPadFeedback.computeTilt(rect, animX, animY, shiftFraction = 0.032f, compressFraction = 0.055f)
+        val tilt = DPadFeedback.computeTilt(rect, animX, animY)
         val shadowDx = -animX * s * 0.018f
         val shadowDy = 2f - animY * s * 0.018f
         shadow(0.4f - 0.10f * tilt.magnitude, 3f - 0.8f * tilt.magnitude, shadowDy) { inflate, dy, c ->
@@ -551,10 +551,8 @@ private class ArtworkPainter(private val ds: DrawScope, private val measurer: Te
         fun rr(b: Box) = Path().apply { addRoundRect(RoundRect(b.x, b.y, b.maxX, b.maxY, CornerRadius(corner))) }
         val cross = Path().apply { op(rr(vertical), rr(horizontal), PathOperation.Union) }
 
-        ds.withTransform({
-            translate(tilt.translateX, tilt.translateY)
-            scale(tilt.scaleX, tilt.scaleY, pivot = Offset(tilt.pivotX, tilt.pivotY))
-        }) {
+        val pressScale = 1f - 0.015f * tilt.magnitude
+        ds.scale(pressScale, pressScale, pivot = Offset(cx, cy)) {
             drawPath(cross, capColor)
             if (tilt.magnitude > 0.01f) {
                 val half = s * 0.46f
@@ -565,7 +563,7 @@ private class ArtworkPainter(private val ds: DrawScope, private val measurer: Te
                             colors = listOf(
                                 Color.White.copy(alpha = 0.20f * tilt.magnitude),
                                 Color.Transparent,
-                                Color.Black.copy(alpha = 0.34f * tilt.magnitude),
+                                Color.Black.copy(alpha = 0.36f * tilt.magnitude),
                             ),
                             start = Offset(cx - animX * half, cy - animY * half),
                             end = Offset(cx + animX * half, cy + animY * half),
@@ -590,7 +588,7 @@ private class ArtworkPainter(private val ds: DrawScope, private val measurer: Te
                     )
                 }
             }
-            dot(cx + animX * s * 0.012f, cy + animY * s * 0.012f, arm * 0.55f / 2f, p.capPressed.opacity(0.35f))
+            dot(cx, cy, arm * 0.55f / 2f, p.capPressed.opacity(0.35f))
 
             val baseTriW = arm * 0.34f
             val baseTriH = arm * 0.26f
@@ -601,13 +599,12 @@ private class ArtworkPainter(private val ds: DrawScope, private val measurer: Te
                 180f to downWeight,
                 270f to leftWeight,
             )) {
-                val triW = baseTriW * (1f + 0.22f * weight)
-                val triH = baseTriH * (1f + 0.22f * weight)
-                val distance = baseDistance + s * 0.018f * weight
+                val triW = baseTriW * (1f + 0.16f * weight)
+                val triH = baseTriH * (1f + 0.16f * weight)
                 val color = lerp(p.capIcon.color, p.active.color, weight.coerceIn(0f, 1f))
                 rotate(degrees, pivot = Offset(cx, cy)) {
-                    // Up-pointing triangle centered `distance` above the center, rotated into place.
-                    translate(cx, cy - distance) {
+                    // Up-pointing triangle centered `baseDistance` above the center, rotated into place.
+                    translate(cx, cy - baseDistance) {
                         val tri = Path().apply {
                             moveTo(0f, -triH / 2f)
                             lineTo(triW / 2f, triH / 2f)

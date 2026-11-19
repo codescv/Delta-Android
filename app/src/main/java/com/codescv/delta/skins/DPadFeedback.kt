@@ -99,15 +99,16 @@ data class DPadTiltTransform(
 
 object DPadFeedback {
     /**
-     * Computes a directional rocker transform from animated normalized vector `(animX, animY)`.
-     * Neutral `(0, 0)` yields identity transform (`translate = 0, scale = 1, magnitude = 0`).
+     * Computes a center-locked directional rocker transform from animated normalized vector
+     * `(animX, animY)`. Defaults to zero translation drift so the D-Pad stays aligned inside
+     * its skin cutout.
      */
     fun computeTilt(
         frame: Box,
         animX: Float,
         animY: Float,
-        shiftFraction: Float = 0.042f,
-        compressFraction: Float = 0.065f,
+        shiftFraction: Float = 0f,
+        compressFraction: Float = 0f,
     ): DPadTiltTransform {
         val cx = animX.coerceIn(-1f, 1f)
         val cy = animY.coerceIn(-1f, 1f)
@@ -117,8 +118,8 @@ object DPadFeedback {
             translateY = cy * frame.height * shiftFraction,
             scaleX = 1f - abs(cx) * compressFraction,
             scaleY = 1f - abs(cy) * compressFraction,
-            pivotX = frame.midX - cx * frame.width * 0.35f,
-            pivotY = frame.midY - cy * frame.height * 0.35f,
+            pivotX = frame.midX,
+            pivotY = frame.midY,
             magnitude = mag,
         )
     }
@@ -130,9 +131,9 @@ object DPadFeedback {
     fun armBox(
         frame: Box,
         direction: DPadDirection,
-        armWidthFraction: Float = 0.34f,
+        armWidthFraction: Float = 1f / 3f,
         armLengthFraction: Float = 0.36f,
-        outerInsetFraction: Float = 0.04f,
+        outerInsetFraction: Float = 0f,
     ): Box {
         val s = min(frame.width, frame.height)
         val armW = s * armWidthFraction

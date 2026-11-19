@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Version 2.0.5 tracked the iOS Delta release this port is based on; later
 versions are Android-only updates.
 
+## [2.0.10] - 2026-11-19
+
+### Fixed
+
+- **D-Pad press animation alignment**: Keep standalone D-Pad artwork centered inside its recessed skin cutout with alpha-masked (`SrcAtop`) directional 3D lighting, and remove extra floating chevrons / stroke borders so pressed feedback aligns cleanly across all `.deltaskin` and procedural skins.
+
 ## [2.0.9] - 2026-11-19
 
 ### Changed

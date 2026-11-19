@@ -13,39 +13,28 @@ class DPadFeedbackTest {
     private val frame = Box(20f, 100f, 160f, 160f)
 
     @Test
-    fun cardinalDirectionsProduceDistinctTargetsAndTransforms() {
-        val states = listOf(
-            DPadState.fromButtons(setOf(VirtualButton.UP)),
-            DPadState.fromButtons(setOf(VirtualButton.DOWN)),
-            DPadState.fromButtons(setOf(VirtualButton.LEFT)),
-            DPadState.fromButtons(setOf(VirtualButton.RIGHT)),
-        )
-        val transforms = states.map { DPadFeedback.computeTilt(frame, it.targetX, it.targetY) }
+    fun cardinalDirectionsProduceDistinctVectorsAndCenterLockedTransform() {
+        val up = DPadState.fromButtons(setOf(VirtualButton.UP))
+        val down = DPadState.fromButtons(setOf(VirtualButton.DOWN))
+        val left = DPadState.fromButtons(setOf(VirtualButton.LEFT))
+        val right = DPadState.fromButtons(setOf(VirtualButton.RIGHT))
 
-        // Every cardinal direction has a unique transform (translate, scale, pivot).
-        assertEquals(4, transforms.toSet().size)
+        val vectors = listOf(up, down, left, right).map { it.targetX to it.targetY }
+        assertEquals(4, vectors.toSet().size)
+        assertTrue(up.targetY < 0f && up.targetX == 0f)
+        assertTrue(down.targetY > 0f && down.targetX == 0f)
+        assertTrue(left.targetX < 0f && left.targetY == 0f)
+        assertTrue(right.targetX > 0f && right.targetY == 0f)
 
-        val up = transforms[0]
-        val down = transforms[1]
-        val left = transforms[2]
-        val right = transforms[3]
-
-        assertTrue("UP should shift upward", up.translateY < 0f && up.translateX == 0f)
-        assertTrue("DOWN should shift downward", down.translateY > 0f && down.translateX == 0f)
-        assertTrue("LEFT should shift left", left.translateX < 0f && left.translateY == 0f)
-        assertTrue("RIGHT should shift right", right.translateX > 0f && right.translateY == 0f)
-
-        // Pivot should anchor on the opposite side of the press for realistic rocker tilt.
-        assertTrue("UP pivot below center", up.pivotY > frame.midY)
-        assertTrue("DOWN pivot above center", down.pivotY < frame.midY)
-        assertTrue("LEFT pivot right of center", left.pivotX > frame.midX)
-        assertTrue("RIGHT pivot left of center", right.pivotX < frame.midX)
-
-        // Axis compression should differ between vertical and horizontal presses.
-        assertTrue(up.scaleY < 1f && up.scaleX == 1f)
-        assertTrue(left.scaleX < 1f && left.scaleY == 1f)
-        assertEquals(1f, up.magnitude, 1e-4f)
-        assertEquals(1f, right.magnitude, 1e-4f)
+        // Default tilt stays center-locked (zero translation drift) so D-Pad stays inside cutout.
+        for (state in listOf(up, down, left, right)) {
+            val t = DPadFeedback.computeTilt(frame, state.targetX, state.targetY)
+            assertEquals(0f, t.translateX, 1e-5f)
+            assertEquals(0f, t.translateY, 1e-5f)
+            assertEquals(frame.midX, t.pivotX, 1e-5f)
+            assertEquals(frame.midY, t.pivotY, 1e-5f)
+            assertEquals(1f, t.magnitude, 1e-4f)
+        }
     }
 
     @Test
@@ -61,8 +50,7 @@ class DPadFeedbackTest {
 
         assertEquals(1f, tUpRight.magnitude, 1e-3f)
         assertEquals(1f, tDownLeft.magnitude, 1e-3f)
-        assertNotEquals(tUpRight, tDownLeft)
-        assertTrue(tUpRight.scaleX < 1f && tUpRight.scaleY < 1f)
+        assertNotEquals(upRight.targetX, downLeft.targetX)
         assertEquals(setOf(DPadDirection.UP, DPadDirection.RIGHT), upRight.activeDirections)
     }
 

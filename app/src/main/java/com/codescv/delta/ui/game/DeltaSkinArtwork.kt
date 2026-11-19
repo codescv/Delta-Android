@@ -12,21 +12,21 @@ import androidx.compose.runtime.produceState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.ColorMatrix
 import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.Paint
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.drawscope.scale
-import androidx.compose.ui.graphics.drawscope.translate
-import androidx.compose.ui.graphics.drawscope.withTransform
+import androidx.compose.ui.graphics.withSaveLayer
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import com.codescv.delta.model.VirtualButton
@@ -123,32 +123,42 @@ fun DeltaSkinArtwork(
                 } else if (placed.item.kind == DeltaSkin.ItemKind.DPAD) {
                     val tilt = DPadFeedback.computeTilt(f, dpadAnimX, dpadAnimY)
                     if (img != null) {
-                        withTransform({
-                            translate(tilt.translateX, tilt.translateY)
-                            scale(tilt.scaleX, tilt.scaleY, pivot = Offset(tilt.pivotX, tilt.pivotY))
-                        }) {
-                            drawImage(
-                                img,
-                                dstOffset = IntOffset(f.x.toInt(), f.y.toInt()),
-                                dstSize = IntSize(f.width.toInt(), f.height.toInt()),
-                                alpha = alpha,
-                                filterQuality = FilterQuality.High,
-                            )
-                            drawDPadDirectionalFeedback(
-                                frame = f,
-                                animX = dpadAnimX,
-                                animY = dpadAnimY,
-                                magnitude = tilt.magnitude,
-                                upWeight = upWeight,
-                                downWeight = downWeight,
-                                leftWeight = leftWeight,
-                                rightWeight = rightWeight,
-                                onImage = true,
-                                alpha = alpha,
-                            )
+                        val pressScale = 1f - 0.015f * tilt.magnitude
+                        scale(pressScale, pressScale, pivot = Offset(f.midX, f.midY)) {
+                            if (tilt.magnitude > 0.01f) {
+                                // Alpha-masked directional 3D lighting: stays 100% inside the
+                                // D-Pad silhouette with zero cutout drift or extra chevrons.
+                                drawContext.canvas.withSaveLayer(
+                                    Rect(f.x, f.y, f.maxX, f.maxY),
+                                    Paint(),
+                                ) {
+                                    drawImage(
+                                        img,
+                                        dstOffset = IntOffset(f.x.toInt(), f.y.toInt()),
+                                        dstSize = IntSize(f.width.toInt(), f.height.toInt()),
+                                        alpha = alpha,
+                                        filterQuality = FilterQuality.High,
+                                    )
+                                    drawDPadImageShading(
+                                        frame = f,
+                                        animX = dpadAnimX,
+                                        animY = dpadAnimY,
+                                        magnitude = tilt.magnitude,
+                                        alpha = alpha,
+                                    )
+                                }
+                            } else {
+                                drawImage(
+                                    img,
+                                    dstOffset = IntOffset(f.x.toInt(), f.y.toInt()),
+                                    dstSize = IntSize(f.width.toInt(), f.height.toInt()),
+                                    alpha = alpha,
+                                    filterQuality = FilterQuality.High,
+                                )
+                            }
                         }
                     } else {
-                        drawDPadDirectionalFeedback(
+                        drawDPadBakedFeedback(
                             frame = f,
                             animX = dpadAnimX,
                             animY = dpadAnimY,
@@ -157,7 +167,6 @@ fun DeltaSkinArtwork(
                             downWeight = downWeight,
                             leftWeight = leftWeight,
                             rightWeight = rightWeight,
-                            onImage = false,
                             alpha = alpha,
                         )
                     }
@@ -193,11 +202,57 @@ fun DeltaSkinArtwork(
 }
 
 /**
- * Directional visual feedback for a `.deltaskin` D-Pad: shades/illuminates only the pressed arm(s),
- * draws a gliding directional glow & rocker rim, and highlights a directional chevron on each
- * active arm so Up / Down / Left / Right / Diagonals are immediately distinguishable.
+ * Alpha-masked 3D rocker lighting for standalone `.deltaskin` D-Pad artwork (e.g. GBA portrait):
+ * drawn with [BlendMode.SrcAtop] inside a saveLayer so shading stays strictly inside the D-Pad
+ * silhouette without extra chevrons or border boxes.
  */
-private fun DrawScope.drawDPadDirectionalFeedback(
+private fun DrawScope.drawDPadImageShading(
+    frame: Box,
+    animX: Float,
+    animY: Float,
+    magnitude: Float,
+    alpha: Float,
+) {
+    val s = minOf(frame.width, frame.height)
+    if (s <= 0f || magnitude <= 0.01f) return
+    val half = s * 0.5f
+    drawRect(
+        brush = Brush.linearGradient(
+            colors = listOf(
+                Color.White.copy(alpha = 0.22f * magnitude * alpha),
+                Color.Transparent,
+                Color.Black.copy(alpha = 0.42f * magnitude * alpha),
+            ),
+            start = Offset(frame.midX - animX * half, frame.midY - animY * half),
+            end = Offset(frame.midX + animX * half, frame.midY + animY * half),
+        ),
+        topLeft = Offset(frame.x, frame.y),
+        size = Size(frame.width, frame.height),
+        blendMode = BlendMode.SrcAtop,
+    )
+    val spotCenter = Offset(frame.midX + animX * s * 0.33f, frame.midY + animY * s * 0.33f)
+    val spotRadius = s * 0.36f
+    drawCircle(
+        brush = Brush.radialGradient(
+            colors = listOf(
+                Color.Black.copy(alpha = 0.28f * magnitude * alpha),
+                Color.Transparent,
+            ),
+            center = spotCenter,
+            radius = spotRadius,
+        ),
+        radius = spotRadius,
+        center = spotCenter,
+        blendMode = BlendMode.SrcAtop,
+    )
+}
+
+/**
+ * Soft, borderless directional feedback for skins whose D-Pad is baked into the background
+ * (NDS, GBC, NES, SNES, N64, Genesis, GBA landscape): shades only the active arm(s) and glides a
+ * radial press glow without hard outlines or extra chevrons that could misalign with the artwork.
+ */
+private fun DrawScope.drawDPadBakedFeedback(
     frame: Box,
     animX: Float,
     animY: Float,
@@ -206,7 +261,6 @@ private fun DrawScope.drawDPadDirectionalFeedback(
     downWeight: Float,
     leftWeight: Float,
     rightWeight: Float,
-    onImage: Boolean,
     alpha: Float,
 ) {
     val maxWeight = maxOf(upWeight, downWeight, leftWeight, rightWeight, magnitude)
@@ -221,24 +275,21 @@ private fun DrawScope.drawDPadDirectionalFeedback(
         DPadDirection.LEFT to leftWeight,
     )
 
-    // 1. Per-arm directional depressed shading + subtle edge highlight on each pressed arm.
     for ((dir, weight) in weights) {
         if (weight <= 0.01f) continue
         val arm = DPadFeedback.armBox(frame, dir)
-        val r = minOf(arm.width, arm.height) * 0.24f
+        val r = minOf(arm.width, arm.height) * 0.22f
         val (gradStart, gradEnd) = when (dir) {
             DPadDirection.UP -> Offset(arm.midX, arm.maxY) to Offset(arm.midX, arm.minY)
             DPadDirection.DOWN -> Offset(arm.midX, arm.minY) to Offset(arm.midX, arm.maxY)
             DPadDirection.LEFT -> Offset(arm.maxX, arm.midY) to Offset(arm.minX, arm.midY)
             DPadDirection.RIGHT -> Offset(arm.minX, arm.midY) to Offset(arm.maxX, arm.midY)
         }
-        val darkAlpha = (if (onImage) 0.34f else 0.24f) * weight * alpha
-        val lightAlpha = (if (onImage) 0.22f else 0.36f) * weight * alpha
         drawRoundRect(
             brush = Brush.linearGradient(
                 colors = listOf(
-                    Color.Black.copy(alpha = darkAlpha * 0.35f),
-                    Color.Black.copy(alpha = darkAlpha),
+                    Color.Black.copy(alpha = 0.06f * weight * alpha),
+                    Color.Black.copy(alpha = 0.32f * weight * alpha),
                 ),
                 start = gradStart,
                 end = gradEnd,
@@ -247,55 +298,18 @@ private fun DrawScope.drawDPadDirectionalFeedback(
             size = Size(arm.width, arm.height),
             cornerRadius = CornerRadius(r, r),
         )
-        drawRoundRect(
-            brush = Brush.linearGradient(
-                colors = listOf(
-                    Color.White.copy(alpha = lightAlpha * 0.2f),
-                    Color.White.copy(alpha = lightAlpha),
-                ),
-                start = gradStart,
-                end = gradEnd,
-            ),
-            topLeft = Offset(arm.x, arm.y),
-            size = Size(arm.width, arm.height),
-            cornerRadius = CornerRadius(r, r),
-            style = Stroke(width = (s * 0.022f).coerceAtLeast(2f)),
-        )
-
-        // Crisp directional chevron inside the pressed arm.
-        val degrees = when (dir) {
-            DPadDirection.UP -> 0f
-            DPadDirection.RIGHT -> 90f
-            DPadDirection.DOWN -> 180f
-            DPadDirection.LEFT -> 270f
-        }
-        val triW = s * 0.115f * (0.9f + 0.18f * weight)
-        val triH = s * 0.085f * (0.9f + 0.18f * weight)
-        val dist = s * (0.31f + 0.025f * weight)
-        rotate(degrees, pivot = Offset(frame.midX, frame.midY)) {
-            translate(frame.midX, frame.midY - dist) {
-                val tri = Path().apply {
-                    moveTo(0f, -triH / 2f)
-                    lineTo(triW / 2f, triH / 2f)
-                    lineTo(-triW / 2f, triH / 2f)
-                    close()
-                }
-                drawPath(tri, Color.White.copy(alpha = 0.78f * weight * alpha))
-            }
-        }
     }
 
-    // 2. Smoothly gliding directional radial glow toward (animX, animY) + subtle opposite-side lift.
     if (magnitude > 0.01f) {
         val glowCenter = Offset(
-            frame.midX + animX * s * 0.28f,
-            frame.midY + animY * s * 0.28f,
+            frame.midX + animX * s * 0.31f,
+            frame.midY + animY * s * 0.31f,
         )
-        val glowRadius = s * 0.34f
+        val glowRadius = s * 0.32f
         drawCircle(
             brush = Brush.radialGradient(
                 colors = listOf(
-                    Color.White.copy(alpha = (if (onImage) 0.24f else 0.34f) * magnitude * alpha),
+                    Color.White.copy(alpha = 0.26f * magnitude * alpha),
                     Color.Transparent,
                 ),
                 center = glowCenter,
@@ -304,25 +318,6 @@ private fun DrawScope.drawDPadDirectionalFeedback(
             radius = glowRadius,
             center = glowCenter,
         )
-        if (onImage) {
-            val liftCenter = Offset(
-                frame.midX - animX * s * 0.26f,
-                frame.midY - animY * s * 0.26f,
-            )
-            val liftRadius = s * 0.28f
-            drawCircle(
-                brush = Brush.radialGradient(
-                    colors = listOf(
-                        Color.White.copy(alpha = 0.14f * magnitude * alpha),
-                        Color.Transparent,
-                    ),
-                    center = liftCenter,
-                    radius = liftRadius,
-                ),
-                radius = liftRadius,
-                center = liftCenter,
-            )
-        }
     }
 }
 

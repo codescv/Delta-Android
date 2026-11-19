@@ -8,8 +8,8 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
 }
 
-val deltaVersionName = "2.0.9"
-val deltaVersionCode = 20009
+val deltaVersionName = "2.0.10"
+val deltaVersionCode = 20010
 
 android {
     namespace = "com.codescv.delta"
