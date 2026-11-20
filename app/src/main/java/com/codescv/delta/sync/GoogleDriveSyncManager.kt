@@ -34,6 +34,8 @@ class GoogleDriveSyncManager(
     private val filesDir: File,
     private val scope: CoroutineScope,
     private val deviceName: String = "Android",
+    private val defaultClientId: String = "",
+    private val defaultClientSecret: String = "",
     private val onLocalFilesUpdated: () -> Unit = {},
     private val clock: SyncClock = SyncClock.SYSTEM,
     private val tokenEndpoint: String = DEFAULT_OAUTH_TOKEN_ENDPOINT,
@@ -72,7 +74,19 @@ class GoogleDriveSyncManager(
     private var activeLoopback: GoogleOAuthLoopback? = null
 
     private fun initialUiState(): SyncUiState {
-        val creds = secretStore.load()
+        var creds = secretStore.load()
+        val seededId = defaultClientId.trim()
+        val seededSecret = defaultClientSecret.trim()
+        val needId = creds.clientId.isBlank() && seededId.isNotBlank()
+        val needSecret = creds.clientSecret.isBlank() && seededSecret.isNotBlank()
+        if (needId || needSecret) {
+            val updated = creds.copy(
+                clientId = if (needId) seededId else creds.clientId,
+                clientSecret = if (needSecret) seededSecret else creds.clientSecret,
+            )
+            runCatching { secretStore.save(updated) }
+            creds = updated
+        }
         return SyncUiState(
             isSignedIn = creds.isSignedIn,
             accountEmail = creds.accountEmail,

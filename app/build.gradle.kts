@@ -11,6 +11,24 @@ plugins {
 val deltaVersionName = "2.0.10"
 val deltaVersionCode = 20010
 
+val localProps = Properties().apply {
+    val f = rootProject.file("local.properties")
+    if (f.isFile) f.inputStream().use { load(it) }
+}
+fun escapeBuildConfigString(value: String): String =
+    value.replace("\\", "\\\\").replace("\"", "\\\"")
+
+val defaultGdriveClientId = (
+    localProps.getProperty("DELTA_GDRIVE_CLIENT_ID")
+        ?: System.getenv("DELTA_GDRIVE_CLIENT_ID")
+        ?: "304560912778-dr91a3ultmqer7155tmc0oevi84k7bd9.apps.googleusercontent.com"
+    ).trim()
+val defaultGdriveClientSecret = (
+    localProps.getProperty("DELTA_GDRIVE_CLIENT_SECRET")
+        ?: System.getenv("DELTA_GDRIVE_CLIENT_SECRET")
+        ?: ""
+    ).trim()
+
 android {
     namespace = "com.codescv.delta"
     compileSdk = 35
@@ -28,6 +46,16 @@ android {
             "String",
             "UPDATE_API_BASE",
             "\"https://api.github.com/repos/codescv/Delta-Android\"",
+        )
+        buildConfigField(
+            "String",
+            "DEFAULT_GDRIVE_CLIENT_ID",
+            "\"${escapeBuildConfigString(defaultGdriveClientId)}\"",
+        )
+        buildConfigField(
+            "String",
+            "DEFAULT_GDRIVE_CLIENT_SECRET",
+            "\"${escapeBuildConfigString(defaultGdriveClientSecret)}\"",
         )
 
         ndk {
