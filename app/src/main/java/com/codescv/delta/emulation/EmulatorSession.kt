@@ -117,35 +117,45 @@ class EmulatorSession(
 
     /** Creates the core, loads the ROM / SRAM / optional save state, starts threads. */
     fun start(resumeStateId: String? = null, cheats: List<CheatCode> = emptyList()) {
-        NativeBridge.ensureLoaded()
-        systemDirectory.mkdirs()
-        cacheDirectory.mkdirs()
-        val saveDir = File(saves.savesDirectory, rom.systemId).apply { mkdirs() }
-        // Directories are injected before retro_init (Android has no /tmp).
-        handle = NativeBridge.nativeCreate(coreId, systemDirectory.absolutePath, saveDir.absolutePath, cacheDirectory.absolutePath)
-        for ((k, v) in defaultCoreOptions(system) + coreOptions) NativeBridge.nativeSetOption(handle, k, v)
-        val err = NativeBridge.nativeLoadGame(handle, rom.path)
-        if (err != null) {
-            NativeBridge.nativeDestroy(handle)
-            handle = 0
-            throw IllegalStateException("Cannot start ${rom.title}: $err")
-        }
-        val info = NativeBridge.nativeCoreInfo(handle)
-        libraryName = info[0] ?: ""
-        libraryVersion = info[1] ?: ""
-        refreshGeometry()
-        saves.readSaveRam(rom)?.let { sram ->
-            if (NativeBridge.nativeLoadSaveRam(handle, sram) == null) lastPersistedSram = sram
-        }
-        if (resumeStateId != null) loadState(resumeStateId, quiet = true)
-        applyCheats(cheats, quiet = true)
-        NativeBridge.nativeSetAudioVolume(handle, volume)
-        NativeBridge.nativeSetAudioMuted(handle, muted)
         saves.markRunning(rom, true)
-        applyFastForward(notify = false)
-        running.set(true)
-        startEmulationThread()
-        startAudioThread()
+        try {
+            NativeBridge.ensureLoaded()
+            systemDirectory.mkdirs()
+            cacheDirectory.mkdirs()
+            val saveDir = File(saves.savesDirectory, rom.systemId).apply { mkdirs() }
+            // Directories are injected before retro_init (Android has no /tmp).
+            handle = NativeBridge.nativeCreate(coreId, systemDirectory.absolutePath, saveDir.absolutePath, cacheDirectory.absolutePath)
+            for ((k, v) in defaultCoreOptions(system) + coreOptions) NativeBridge.nativeSetOption(handle, k, v)
+            val err = NativeBridge.nativeLoadGame(handle, rom.path)
+            if (err != null) {
+                NativeBridge.nativeDestroy(handle)
+                handle = 0
+                throw IllegalStateException("Cannot start ${rom.title}: $err")
+            }
+            val info = NativeBridge.nativeCoreInfo(handle)
+            libraryName = info[0] ?: ""
+            libraryVersion = info[1] ?: ""
+            refreshGeometry()
+            saves.readSaveRam(rom)?.let { sram ->
+                if (NativeBridge.nativeLoadSaveRam(handle, sram) == null) lastPersistedSram = sram
+            }
+            if (resumeStateId != null) loadState(resumeStateId, quiet = true)
+            applyCheats(cheats, quiet = true)
+            NativeBridge.nativeSetAudioVolume(handle, volume)
+            NativeBridge.nativeSetAudioMuted(handle, muted)
+            applyFastForward(notify = false)
+            running.set(true)
+            startEmulationThread()
+            startAudioThread()
+        } catch (t: Throwable) {
+            if (handle != 0L) {
+                runCatching { NativeBridge.nativeDestroy(handle) }
+                handle = 0
+            }
+            running.set(false)
+            saves.markRunning(rom, false)
+            throw t
+        }
     }
 
     private fun refreshGeometry() {

@@ -292,6 +292,7 @@ fun GameScreen(rom: RomEntry, resumeStateId: String?, navigator: DeltaNavigator)
                     s.stop()
                     // The auto save (and its screenshot) now exist: refresh Continue Playing.
                     container.library.bumpCovers()
+                    container.sync.triggerAutoSync("game_closed", debounce = false)
                 }
             }
         }

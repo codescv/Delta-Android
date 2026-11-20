@@ -198,6 +198,14 @@ class SaveFileManager(val root: File) {
         atomicWrite(indexFile(rom), json.encodeToString(index).toByteArray())
 
     @Synchronized
+    fun readStateIndex(rom: RomEntry): List<SaveStateInfo> = readIndex(rom).entries
+
+    @Synchronized
+    fun replaceStateIndex(rom: RomEntry, entries: List<SaveStateInfo>) {
+        writeIndex(rom, SaveStateIndex(entries))
+    }
+
+    @Synchronized
     private fun upsert(rom: RomEntry, info: SaveStateInfo) {
         val idx = readIndex(rom)
         writeIndex(rom, SaveStateIndex(idx.entries.filter { it.id != info.id } + info))

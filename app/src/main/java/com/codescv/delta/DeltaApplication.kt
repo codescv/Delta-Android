@@ -1,12 +1,15 @@
 package com.codescv.delta
 
 import android.app.Application
+import android.os.Build
 import com.codescv.delta.library.CoverArtFetcher
 import com.codescv.delta.library.LibraryStore
 import com.codescv.delta.library.OpenVgdbTable
 import com.codescv.delta.saves.SaveFileManager
 import com.codescv.delta.settings.PreferencesStore
 import com.codescv.delta.skins.SkinRepository
+import com.codescv.delta.sync.AndroidKeystoreSyncSecretStore
+import com.codescv.delta.sync.GoogleDriveSyncManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -41,6 +44,17 @@ class AppContainer(val app: Application) {
     val covers = CoverArtFetcher(coversDir, { openVgdb })
     val library = LibraryStore(root, File(root, "library.json"), saves, covers)
     val skins = SkinRepository(app, skinsDir)
+    val syncSecretStore = AndroidKeystoreSyncSecretStore(app)
+    val sync = GoogleDriveSyncManager(
+        secretStore = syncSecretStore,
+        preferences = preferences,
+        romsProvider = { library.value.entries },
+        saves = saves,
+        filesDir = root,
+        scope = ioScope,
+        deviceName = "${Build.MANUFACTURER} ${Build.MODEL}".trim().ifBlank { "Android" },
+        onLocalFilesUpdated = { library.bumpCovers() },
+    )
 }
 
 class DeltaApplication : Application() {

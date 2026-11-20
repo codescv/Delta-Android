@@ -18,25 +18,36 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.Logout
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.outlined.Archive
+import androidx.compose.material.icons.outlined.Cloud
 import androidx.compose.material.icons.outlined.CreateNewFolder
 import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.NoteAdd
+import androidx.compose.material.icons.outlined.Sync
+import androidx.compose.material.icons.outlined.Visibility
+import androidx.compose.material.icons.outlined.VisibilityOff
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -47,13 +58,18 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.documentfile.provider.DocumentFile
 import com.codescv.delta.DeltaApplication
 import com.codescv.delta.model.GameSystem
 import com.codescv.delta.settings.AppPreferences
+import com.codescv.delta.sync.CancellationIOException
+import com.codescv.delta.sync.ConflictPolicy
 import com.codescv.delta.ui.components.FormDivider
 import com.codescv.delta.ui.components.FormRow
 import com.codescv.delta.ui.components.FormSection
@@ -61,9 +77,12 @@ import com.codescv.delta.ui.components.FormToggleRow
 import com.codescv.delta.ui.theme.DeltaColors
 import com.codescv.delta.ui.theme.DeltaType
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.text.DateFormat
+import java.util.Date
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 
@@ -168,12 +187,371 @@ private fun AppIconRow(icon: DeltaAppIcon, selected: Boolean, onClick: () -> Uni
 // ------------------------------------------------------------------------------- Services
 
 @Composable
-internal fun DeltaSyncSettings() {
+internal fun DeltaSyncSettings(prefs: AppPreferences, nav: SettingsNav) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val container = DeltaApplication.container
+    val sync = container.sync
+    val syncState by sync.uiState.collectAsState()
+
+    var clientIdInput by remember(syncState.clientId) { mutableStateOf(syncState.clientId) }
+    var clientSecretInput by remember { mutableStateOf("") }
+    var secretLoaded by remember { mutableStateOf(false) }
+    var showSecret by remember { mutableStateOf(false) }
+
+    // Load client secret off the main thread once.
+    LaunchedEffect(Unit) {
+        val loaded = withContext(Dispatchers.IO) { sync.currentClientSecret() }
+        clientSecretInput = loaded
+        secretLoaded = true
+    }
+
+    // Debounce persisting OAuth credentials off the main thread (avoids Keystore crypto per keystroke).
+    val latestClientId by rememberUpdatedState(clientIdInput)
+    val latestClientSecret by rememberUpdatedState(clientSecretInput)
+    LaunchedEffect(clientIdInput, clientSecretInput, secretLoaded) {
+        if (!secretLoaded) return@LaunchedEffect
+        delay(400)
+        withContext(Dispatchers.IO) {
+            sync.saveOAuthConfig(clientIdInput, clientSecretInput)
+        }
+    }
+    DisposableEffect(Unit) {
+        onDispose {
+            if (secretLoaded) {
+                val id = latestClientId
+                val secret = latestClientSecret
+                container.ioScope.launch { sync.saveOAuthConfig(id, secret) }
+            }
+        }
+    }
+
     SettingsPage {
+        // 1. Google Drive connection status + Sign In / Sign Out
+        FormSection(header = "Google Drive") {
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 56.dp)
+                    .padding(horizontal = 16.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(
+                    Modifier
+                        .size(10.dp)
+                        .clip(CircleShape)
+                        .background(if (syncState.isSignedIn) DeltaColors.BadgeGreen else DeltaColors.SystemGray),
+                )
+                Spacer(Modifier.width(12.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        text = if (syncState.isSignedIn) {
+                            syncState.accountName.ifBlank { "Connected" }
+                        } else {
+                            "Not Connected"
+                        },
+                        style = DeltaType.Body,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color.White,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Text(
+                        text = if (syncState.isSignedIn) {
+                            syncState.accountEmail.ifBlank { "Google Drive" }
+                        } else {
+                            "Sign in to sync saves across Android and iOS."
+                        },
+                        style = DeltaType.Caption,
+                        color = DeltaColors.SystemGray,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
+            FormDivider()
+            when {
+                syncState.isSigningIn -> {
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 52.dp)
+                            .padding(horizontal = 16.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(18.dp),
+                            strokeWidth = 2.dp,
+                            color = DeltaColors.Purple,
+                        )
+                        Spacer(Modifier.width(12.dp))
+                        Text(
+                            "Complete sign-in in browser…",
+                            style = DeltaType.Body,
+                            color = DeltaColors.SystemGray,
+                            modifier = Modifier.weight(1f),
+                        )
+                        Text(
+                            "Cancel",
+                            style = DeltaType.Body,
+                            color = DestructiveRed,
+                            modifier = Modifier
+                                .clickable { sync.cancelSignIn() }
+                                .padding(horizontal = 8.dp, vertical = 4.dp),
+                        )
+                    }
+                }
+                syncState.isSignedIn -> {
+                    ActionRow(
+                        title = "Sign Out",
+                        icon = Icons.AutoMirrored.Outlined.Logout,
+                        color = DestructiveRed,
+                        enabled = !syncState.isSyncing,
+                    ) {
+                        scope.launch {
+                            sync.signOut()
+                            nav.message("Signed out of Google Drive.")
+                        }
+                    }
+                }
+                else -> {
+                    ActionRow(
+                        title = "Sign In with Google",
+                        icon = Icons.Outlined.Cloud,
+                        color = DeltaColors.Purple,
+                    ) {
+                        val idToSave = clientIdInput
+                        val secretToSave = clientSecretInput
+                        if (idToSave.isBlank()) {
+                            nav.message("Enter a Desktop OAuth Client ID below first.")
+                            return@ActionRow
+                        }
+                        // Run in process-wide ioScope so Activity recreation while the browser is open
+                        // neither drops the tokens nor leaks the loopback socket.
+                        container.ioScope.launch {
+                            sync.saveOAuthConfig(idToSave, secretToSave)
+                            runCatching {
+                                sync.signIn { authUrl ->
+                                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(authUrl))
+                                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                    context.applicationContext.startActivity(intent)
+                                }
+                            }.onSuccess { info ->
+                                val label = info.email.ifBlank { info.displayName.ifBlank { "Google Drive" } }
+                                withContext(Dispatchers.Main) { nav.message("Connected to $label.") }
+                            }.onFailure { err ->
+                                if (err !is CancellationIOException) {
+                                    withContext(Dispatchers.Main) {
+                                        nav.message(err.message ?: "Google sign-in failed.")
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            if (!syncState.isSignedIn && syncState.lastError != null) {
+                FormDivider()
+                Text(
+                    text = syncState.lastError.orEmpty(),
+                    style = DeltaType.Caption,
+                    color = DestructiveRed,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 10.dp),
+                )
+            }
+        }
+
+        // 2. GCP OAuth Setup
         FormSection(
-            footer = "Delta Sync is not available in this build. Games, saves and save states are stored on this device in Files › Delta.",
+            header = "GCP OAuth Setup",
+            footer = "Redirect URI: http://127.0.0.1:<port>/oauth2callback — create both the Desktop (Android) and iOS OAuth clients in the same GCP project so both devices share the Delta Sync folder.",
         ) {
-            FormRow(title = "Service", value = "None")
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 10.dp),
+            ) {
+                Text("OAuth Client ID (Desktop)", style = DeltaType.Caption, color = DeltaColors.SystemGray)
+                Spacer(Modifier.height(4.dp))
+                Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterStart) {
+                    if (clientIdInput.isEmpty()) {
+                        Text(
+                            "1234567890-abc.apps.googleusercontent.com",
+                            style = DeltaType.Body,
+                            color = Color(0xFF5A5A5F),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                    BasicTextField(
+                        value = clientIdInput,
+                        onValueChange = { v -> clientIdInput = v.trim() },
+                        singleLine = true,
+                        textStyle = DeltaType.Body.copy(color = Color.White),
+                        cursorBrush = SolidColor(DeltaColors.Purple),
+                        keyboardOptions = KeyboardOptions(
+                            capitalization = KeyboardCapitalization.None,
+                            autoCorrectEnabled = false,
+                            keyboardType = KeyboardType.Ascii,
+                        ),
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+            }
+            FormDivider()
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(start = 16.dp, end = 4.dp, top = 6.dp, bottom = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(Modifier.weight(1f).padding(vertical = 4.dp)) {
+                    Text("Client Secret (Optional)", style = DeltaType.Caption, color = DeltaColors.SystemGray)
+                    Spacer(Modifier.height(4.dp))
+                    Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterStart) {
+                        if (clientSecretInput.isEmpty()) {
+                            Text(
+                                "GOCSPX-…",
+                                style = DeltaType.Body,
+                                color = Color(0xFF5A5A5F),
+                                maxLines = 1,
+                            )
+                        }
+                        BasicTextField(
+                            value = clientSecretInput,
+                            onValueChange = { v -> clientSecretInput = v.trim() },
+                            singleLine = true,
+                            visualTransformation = if (showSecret) VisualTransformation.None else PasswordVisualTransformation(),
+                            textStyle = DeltaType.Body.copy(color = Color.White),
+                            cursorBrush = SolidColor(DeltaColors.Purple),
+                            keyboardOptions = KeyboardOptions(
+                                capitalization = KeyboardCapitalization.None,
+                                autoCorrectEnabled = false,
+                                keyboardType = KeyboardType.Password,
+                            ),
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
+                }
+                IconButton(onClick = { showSecret = !showSecret }) {
+                    Icon(
+                        imageVector = if (showSecret) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility,
+                        contentDescription = if (showSecret) "Hide secret" else "Show secret",
+                        tint = DeltaColors.SystemGray,
+                    )
+                }
+            }
+        }
+
+        // 3. Sync Controls (visible when connected)
+        if (syncState.isSignedIn) {
+            FormSection(
+                header = "Sync Controls",
+                footer = "Saves are stored under My Drive › Delta Sync › games/ and shared with Delta on iOS.",
+            ) {
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 52.dp)
+                        .clickable(enabled = !syncState.isSyncing) {
+                            scope.launch {
+                                val res = sync.syncNow()
+                                nav.message(res.summaryText())
+                            }
+                        }
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    if (syncState.isSyncing) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(20.dp),
+                            strokeWidth = 2.dp,
+                            color = DeltaColors.Purple,
+                        )
+                    } else {
+                        Icon(
+                            Icons.Outlined.Sync,
+                            contentDescription = null,
+                            tint = DeltaColors.Purple,
+                            modifier = Modifier.size(22.dp),
+                        )
+                    }
+                    Spacer(Modifier.width(14.dp))
+                    Text(
+                        text = if (syncState.isSyncing) {
+                            syncState.progressMessage ?: "Syncing…"
+                        } else {
+                            "Sync Now"
+                        },
+                        style = DeltaType.Body,
+                        color = if (syncState.isSyncing) DeltaColors.SystemGray else DeltaColors.Purple,
+                    )
+                }
+
+                val lastResult = syncState.lastResult
+                val lastSyncedAt = syncState.lastSyncedAtMs
+                val lastError = syncState.lastError
+                if (lastResult != null || lastSyncedAt > 0L || lastError != null) {
+                    FormDivider()
+                    Column(
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 10.dp),
+                    ) {
+                        if (lastResult != null) {
+                            val summary = buildString {
+                                append(lastResult.summaryText())
+                                if (lastResult.conflicts > 0) {
+                                    append(" · ${lastResult.conflicts} conflict(s)")
+                                }
+                                if (lastResult.skippedRunningGames > 0) {
+                                    append(" · ${lastResult.skippedRunningGames} running skipped")
+                                }
+                            }
+                            Text(summary, style = DeltaType.Caption, color = Color.White)
+                        }
+                        if (lastSyncedAt > 0L) {
+                            val formatted = remember(lastSyncedAt) {
+                                DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT)
+                                    .format(Date(lastSyncedAt))
+                            }
+                            Text("Last synced $formatted", style = DeltaType.Caption, color = DeltaColors.SystemGray)
+                        }
+                        if (lastError != null) {
+                            Spacer(Modifier.height(2.dp))
+                            Text(lastError, style = DeltaType.Caption, color = DestructiveRed)
+                        }
+                    }
+                }
+
+                FormDivider()
+                FormToggleRow(
+                    title = "Auto-Sync",
+                    checked = prefs.syncAutoEnabled,
+                    onCheckedChange = { v -> nav.update { it.copy(syncAutoEnabled = v) } },
+                )
+                FormDivider()
+                FormToggleRow(
+                    title = "Sync Battery Saves (.srm)",
+                    checked = prefs.syncBatterySaves,
+                    onCheckedChange = { v -> nav.update { it.copy(syncBatterySaves = v) } },
+                )
+                FormDivider()
+                FormToggleRow(
+                    title = "Sync Save States (.svs)",
+                    checked = prefs.syncSaveStates,
+                    onCheckedChange = { v -> nav.update { it.copy(syncSaveStates = v) } },
+                )
+                FormDivider()
+                PickerRow(
+                    title = "Conflict Resolution",
+                    options = ConflictPolicy.entries.map { it to it.title },
+                    selected = ConflictPolicy.fromRaw(prefs.syncConflictPolicy),
+                    onSelect = { policy -> nav.update { it.copy(syncConflictPolicy = policy.raw) } },
+                )
+            }
         }
     }
 }

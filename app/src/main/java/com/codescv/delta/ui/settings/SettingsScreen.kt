@@ -209,7 +209,7 @@ private fun SettingsDestination(route: SettingsRoute, prefs: AppPreferences, nav
         is SettingsRoute.CoreOptionValues -> CoreOptionValuesSettings(route.coreId, route.optionKey, prefs, nav)
         SettingsRoute.OnlineMultiplayer -> OnlineMultiplayerSettings(prefs, nav)
         SettingsRoute.AppIcon -> AppIconSettings(prefs, nav)
-        SettingsRoute.DeltaSync -> DeltaSyncSettings()
+        SettingsRoute.DeltaSync -> DeltaSyncSettings(prefs, nav)
         SettingsRoute.RetroAchievements -> RetroAchievementsSettings(prefs, nav)
         SettingsRoute.LilSettings -> LilSettings(prefs, nav)
         SettingsRoute.Advanced -> AdvancedSettings(nav)
@@ -226,6 +226,7 @@ private fun SettingsDestination(route: SettingsRoute, prefs: AppPreferences, nav
 private fun SettingsRoot(prefs: AppPreferences, nav: SettingsNav, onClose: () -> Unit) {
     val scroll = rememberScrollState()
     val collapsed by remember { derivedStateOf { scroll.value > 120 } }
+    val syncState by DeltaApplication.container.sync.uiState.collectAsState()
     Column(Modifier.fillMaxSize()) {
         Box(Modifier.fillMaxWidth().height(56.dp).padding(horizontal = 16.dp)) {
             Box(Modifier.align(Alignment.CenterStart)) { SettingsCloseButton(onClose) }
@@ -277,7 +278,10 @@ private fun SettingsRoot(prefs: AppPreferences, nav: SettingsNav, onClose: () ->
                 NavRow("App Icon", Icons.Outlined.GridView, DeltaColors.BadgeBlue) { nav.push(SettingsRoute.AppIcon) }
             }
             FormSection {
-                NavRow("Delta Sync", Icons.Outlined.Sync, DeltaColors.BadgeIndigo) { nav.push(SettingsRoute.DeltaSync) }
+                NavRow(
+                    "Delta Sync", Icons.Outlined.Sync, DeltaColors.BadgeIndigo,
+                    value = if (syncState.isSignedIn) syncState.accountEmail.ifBlank { "Google Drive" } else null,
+                ) { nav.push(SettingsRoute.DeltaSync) }
                 FormDivider(inset = true)
                 NavRow(
                     "RetroAchievements", Icons.Outlined.MilitaryTech, DeltaColors.BadgeIndigo,

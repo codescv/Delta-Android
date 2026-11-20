@@ -54,6 +54,7 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         UpdateManager.get(this).onHostResume(this)
+        DeltaApplication.container.sync.triggerAutoSync("resume", debounce = true)
     }
 
     override fun onDestroy() {

@@ -69,6 +69,11 @@ data class AppPreferences(
     val gamepadMappings: Map<String, Map<String, Int>> = emptyMap(),
     /** SAF tree URIs linked via "Link ROM Folder…". */
     val linkedFolders: List<String> = emptyList(),
+    // Google Drive Save Sync.
+    val syncAutoEnabled: Boolean = true,
+    val syncBatterySaves: Boolean = true,
+    val syncSaveStates: Boolean = true,
+    val syncConflictPolicy: String = "newestWins",
 ) {
     fun isExperimentalEnabled(key: String) = experimentalFeatures.firstOrNull { it.key == key }?.isEnabled ?: false
     fun experimentalOption(key: String, option: String) = experimentalFeatures.firstOrNull { it.key == key }?.options?.get(option)
