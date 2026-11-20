@@ -11,17 +11,24 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import com.codescv.delta.DeltaApplication
 import com.codescv.delta.ui.game.GameScreen
 import com.codescv.delta.ui.library.LibraryScreen
 import com.codescv.delta.ui.settings.SettingsScreen
+import com.codescv.delta.ui.sync.SaveConflictDialog
 import com.codescv.delta.ui.theme.DeltaColors
 import com.codescv.delta.ui.theme.DeltaTheme
 
 /** Root composable: Library (root) · Settings sheet · full-screen Game. */
 @Composable
 fun DeltaApp(navigator: DeltaNavigator = remember { DeltaNavigator() }) {
+    val sync = DeltaApplication.container.sync
+    val syncState by sync.uiState.collectAsState()
+
     DeltaTheme {
         Box(Modifier.fillMaxSize()) {
             when (val route = navigator.route) {
@@ -49,6 +56,18 @@ fun DeltaApp(navigator: DeltaNavigator = remember { DeltaNavigator() }) {
                     title = { Text("Cannot Start Game") },
                     text = { Text(message) },
                     confirmButton = { TextButton(onClick = { navigator.launchError = null }) { Text("OK") } },
+                )
+            }
+
+            if (syncState.pendingConflicts.isNotEmpty() &&
+                !syncState.conflictPromptDismissed &&
+                navigator.route !is DeltaRoute.Game
+            ) {
+                SaveConflictDialog(
+                    conflicts = syncState.pendingConflicts,
+                    resolvingConflictId = syncState.resolvingConflictId,
+                    onResolve = { conflict, choice -> sync.resolveConflict(conflict, choice) },
+                    onDismiss = { sync.dismissConflictPrompt() },
                 )
             }
         }

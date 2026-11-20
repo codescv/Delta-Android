@@ -61,7 +61,9 @@ class GoogleDriveSyncManager(
     val uiState: StateFlow<SyncUiState> = _uiState.asStateFlow()
 
     private val flightMutex = Mutex()
+    private val engineMutex = Mutex()
     private var activeSync: Deferred<SyncResult>? = null
+    private val activeResolutions = HashSet<Deferred<Result<Unit>>>()
     @Volatile
     private var cachedTokenProvider: OAuthTokenProvider? = null
     @Volatile
@@ -174,6 +176,9 @@ class GoogleDriveSyncManager(
                     accountName = updated.accountName,
                     isSigningIn = false,
                     lastError = null,
+                    pendingConflicts = emptyList(),
+                    resolvingConflictId = null,
+                    conflictPromptDismissed = false,
                 )
             }
             userInfo
@@ -203,12 +208,15 @@ class GoogleDriveSyncManager(
     suspend fun signOut() {
         authGeneration.incrementAndGet()
         cancelSignIn()
-        val runningSync = flightMutex.withLock {
+        val (runningSync, runningResolutions) = flightMutex.withLock {
             val s = activeSync
             activeSync = null
-            s
+            val res = activeResolutions.toList()
+            activeResolutions.clear()
+            s to res
         }
         runningSync?.cancel()
+        runningResolutions.forEach { it.cancel() }
         cachedTokenProvider = null
         val creds = secretStore.load()
         withContext(Dispatchers.IO) {
@@ -229,7 +237,150 @@ class GoogleDriveSyncManager(
                 lastResult = null,
                 lastSyncedAtMs = 0L,
                 lastError = null,
+                pendingConflicts = emptyList(),
+                resolvingConflictId = null,
+                conflictPromptDismissed = false,
             )
+        }
+    }
+
+    /** Hides the conflict chooser modal until the next sync or manual reopen from Settings. */
+    fun dismissConflictPrompt() {
+        _uiState.update { it.copy(conflictPromptDismissed = true) }
+    }
+
+    /** Reopens the conflict chooser modal when pending conflicts exist. */
+    fun showConflictPrompt() {
+        _uiState.update {
+            if (it.pendingConflicts.isNotEmpty()) it.copy(conflictPromptDismissed = false) else it
+        }
+    }
+
+    /**
+     * Resolves a single pending [SyncConflict] under [flightMutex] + [engineMutex] + [authGeneration]
+     * fencing so it cannot race with [syncNow] or [signOut].
+     */
+    suspend fun resolveConflict(conflict: SyncConflict, choice: ConflictChoice): Result<Unit> {
+        lateinit var deferred: Deferred<Result<Unit>>
+        flightMutex.withLock {
+            deferred = scope.async(Dispatchers.IO) {
+                try {
+                    engineMutex.withLock {
+                        executeResolveConflict(conflict, choice)
+                    }
+                } finally {
+                    withContext(NonCancellable) {
+                        flightMutex.withLock {
+                            activeResolutions.remove(deferred)
+                        }
+                    }
+                }
+            }
+            activeResolutions.add(deferred)
+        }
+        return deferred.await()
+    }
+
+    private suspend fun executeResolveConflict(
+        conflict: SyncConflict,
+        choice: ConflictChoice,
+    ): Result<Unit> {
+        val gen = authGeneration.get()
+        val creds = secretStore.load()
+        if (!creds.isSignedIn) {
+            val err = IllegalStateException("Not signed in to Google Drive")
+            if (authGeneration.get() == gen) {
+                _uiState.update { it.copy(isSignedIn = false, resolvingConflictId = null, lastError = err.message) }
+            }
+            return Result.failure(err)
+        }
+
+        _uiState.update { it.copy(resolvingConflictId = conflict.id, lastError = null) }
+
+        val prefs = preferences.value
+        val options = SyncOptions(
+            syncBatterySaves = prefs.syncBatterySaves,
+            syncSaveStates = prefs.syncSaveStates,
+            conflictPolicy = ConflictPolicy.fromRaw(prefs.syncConflictPolicy),
+            deviceName = deviceName,
+        )
+
+        return try {
+            val tokenProvider = getOrCreateTokenProvider(creds, gen)
+            val driveApi = driveApiFactory(tokenProvider)
+            val engine = GoogleDriveSyncEngine(
+                driveApi = driveApi,
+                saveFileManager = saves,
+                baselineFile = baselineFile,
+                isGameRunning = { rom -> saves.isRunning(rom) },
+                clock = clock,
+                shouldPersistBaseline = { authGeneration.get() == gen },
+            )
+            val roms = romsProvider()
+            withContext(Dispatchers.IO) {
+                engine.resolveConflict(
+                    conflict = conflict,
+                    choice = choice,
+                    roms = roms,
+                    options = options,
+                )
+            }
+            if (authGeneration.get() != gen) {
+                return Result.failure(IllegalStateException("Signed out during conflict resolution"))
+            }
+            if (choice == ConflictChoice.USE_CLOUD) {
+                runCatching { onLocalFilesUpdated() }
+            }
+            val resolvedRom = roms.firstOrNull { it.id == conflict.romId }
+                ?: roms.firstOrNull { GameKey.compute(it) == conflict.gameKey }
+            _uiState.update { state ->
+                val remaining = state.pendingConflicts.filter { item ->
+                    if (item.id == conflict.id) return@filter false
+                    // If USE_CLOUD on a battery save invalidated stale local auto-states, prune them too.
+                    if (conflict.kind == SyncConflictKind.BATTERY_SAVE &&
+                        choice == ConflictChoice.USE_CLOUD &&
+                        item.gameKey == conflict.gameKey &&
+                        item.kind == SyncConflictKind.SAVE_STATE &&
+                        item.stateId != null &&
+                        resolvedRom != null &&
+                        !saves.stateFile(resolvedRom, item.stateId).isFile
+                    ) {
+                        return@filter false
+                    }
+                    true
+                }
+                state.copy(
+                    pendingConflicts = remaining,
+                    resolvingConflictId = null,
+                    conflictPromptDismissed = if (remaining.isEmpty()) false else state.conflictPromptDismissed,
+                    lastSyncedAtMs = clock.nowMs(),
+                    lastError = null,
+                )
+            }
+            Result.success(Unit)
+        } catch (ce: CancellationException) {
+            if (authGeneration.get() == gen) {
+                _uiState.update { it.copy(resolvingConflictId = null) }
+            }
+            throw ce
+        } catch (stale: StaleConflictException) {
+            val msg = redactSecrets(stale.message ?: "Google Drive copy changed since this conflict was detected.")
+            if (authGeneration.get() == gen) {
+                _uiState.update { it.copy(resolvingConflictId = null, lastError = msg) }
+                // Refresh pending conflicts asynchronously once engineMutex is released.
+                scope.launch(Dispatchers.IO) {
+                    if (authGeneration.get() == gen) {
+                        runCatching { syncNow() }
+                    }
+                }
+            }
+            Result.failure(stale)
+        } catch (e: Exception) {
+            val msg = redactSecrets(e.message ?: e.javaClass.simpleName)
+            if (authGeneration.get() == gen) {
+                _uiState.update { it.copy(resolvingConflictId = null, lastError = msg) }
+            }
+            Result.failure(e)
         }
     }
 
@@ -261,7 +412,9 @@ class GoogleDriveSyncManager(
                 lateinit var created: Deferred<SyncResult>
                 created = scope.async(Dispatchers.IO) {
                     try {
-                        executeSync()
+                        engineMutex.withLock {
+                            executeSync()
+                        }
                     } finally {
                         withContext(NonCancellable) {
                             flightMutex.withLock {
@@ -340,6 +493,8 @@ class GoogleDriveSyncManager(
                     lastResult = result,
                     lastSyncedAtMs = result.syncedAtMs,
                     lastError = result.errors.firstOrNull(),
+                    pendingConflicts = result.pendingConflicts,
+                    conflictPromptDismissed = false,
                 )
             }
             result

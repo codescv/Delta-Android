@@ -23,6 +23,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.outlined.Logout
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.outlined.Archive
@@ -33,6 +34,7 @@ import androidx.compose.material.icons.outlined.NoteAdd
 import androidx.compose.material.icons.outlined.Sync
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material.icons.outlined.VisibilityOff
+import androidx.compose.material.icons.outlined.WarningAmber
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -227,6 +229,61 @@ internal fun DeltaSyncSettings(prefs: AppPreferences, nav: SettingsNav) {
     }
 
     SettingsPage {
+        // Pending save conflicts banner (always visible at top when conflicts await review)
+        if (syncState.pendingConflicts.isNotEmpty()) {
+            val conflictCount = syncState.pendingConflicts.size
+            val conflictTitle = if (conflictCount == 1) {
+                "1 save conflict needs review"
+            } else {
+                "$conflictCount save conflicts need review"
+            }
+            FormSection {
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .background(DeltaColors.BadgeOrange.copy(alpha = 0.16f))
+                        .clickable { sync.showConflictPrompt() }
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Box(
+                        Modifier
+                            .size(32.dp)
+                            .clip(CircleShape)
+                            .background(DeltaColors.BadgeOrange.copy(alpha = 0.22f)),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.WarningAmber,
+                            contentDescription = null,
+                            tint = DeltaColors.BadgeOrange,
+                            modifier = Modifier.size(18.dp),
+                        )
+                    }
+                    Spacer(Modifier.width(12.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            text = conflictTitle,
+                            style = DeltaType.Body,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color.White,
+                        )
+                        Text(
+                            text = "Tap to resolve",
+                            style = DeltaType.Caption,
+                            color = DeltaColors.BadgeOrange,
+                        )
+                    }
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                        contentDescription = null,
+                        tint = DeltaColors.BadgeOrange,
+                        modifier = Modifier.size(20.dp),
+                    )
+                }
+            }
+        }
+
         // 1. Google Drive connection status + Sign In / Sign Out
         FormSection(header = "Google Drive") {
             Row(
@@ -306,7 +363,7 @@ internal fun DeltaSyncSettings(prefs: AppPreferences, nav: SettingsNav) {
                         title = "Sign Out",
                         icon = Icons.AutoMirrored.Outlined.Logout,
                         color = DestructiveRed,
-                        enabled = !syncState.isSyncing,
+                        enabled = !syncState.isSyncing && syncState.resolvingConflictId == null,
                     ) {
                         scope.launch {
                             sync.signOut()
@@ -455,7 +512,7 @@ internal fun DeltaSyncSettings(prefs: AppPreferences, nav: SettingsNav) {
                     Modifier
                         .fillMaxWidth()
                         .heightIn(min = 52.dp)
-                        .clickable(enabled = !syncState.isSyncing) {
+                        .clickable(enabled = !syncState.isSyncing && syncState.resolvingConflictId == null) {
                             scope.launch {
                                 val res = sync.syncNow()
                                 nav.message(res.summaryText())
@@ -503,7 +560,7 @@ internal fun DeltaSyncSettings(prefs: AppPreferences, nav: SettingsNav) {
                         if (lastResult != null) {
                             val summary = buildString {
                                 append(lastResult.summaryText())
-                                if (lastResult.conflicts > 0) {
+                                if (lastResult.conflicts > 0 && lastResult.pendingConflicts.isEmpty()) {
                                     append(" · ${lastResult.conflicts} conflict(s)")
                                 }
                                 if (lastResult.skippedRunningGames > 0) {

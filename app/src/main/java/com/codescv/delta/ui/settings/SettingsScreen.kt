@@ -280,7 +280,12 @@ private fun SettingsRoot(prefs: AppPreferences, nav: SettingsNav, onClose: () ->
             FormSection {
                 NavRow(
                     "Delta Sync", Icons.Outlined.Sync, DeltaColors.BadgeIndigo,
-                    value = if (syncState.isSignedIn) syncState.accountEmail.ifBlank { "Google Drive" } else null,
+                    value = when {
+                        syncState.pendingConflicts.isNotEmpty() ->
+                            "${syncState.pendingConflicts.size} conflict(s)"
+                        syncState.isSignedIn -> syncState.accountEmail.ifBlank { "Google Drive" }
+                        else -> null
+                    },
                 ) { nav.push(SettingsRoute.DeltaSync) }
                 FormDivider(inset = true)
                 NavRow(

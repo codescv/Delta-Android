@@ -73,7 +73,7 @@ data class AppPreferences(
     val syncAutoEnabled: Boolean = true,
     val syncBatterySaves: Boolean = true,
     val syncSaveStates: Boolean = true,
-    val syncConflictPolicy: String = "newestWins",
+    val syncConflictPolicy: String = "ask",
 ) {
     fun isExperimentalEnabled(key: String) = experimentalFeatures.firstOrNull { it.key == key }?.isEnabled ?: false
     fun experimentalOption(key: String, option: String) = experimentalFeatures.firstOrNull { it.key == key }?.options?.get(option)

@@ -290,7 +290,7 @@ class GoogleDriveSyncAdversarialTest {
             savesA.writeSaveRam("SRAM-V2-A".toByteArray(), romA)
             savesA.saveRamFile(romA).setLastModified(1_700_000_010_000L)
             savesA.writeState(romA, "AUTO-V2-A-STALE".toByteArray(), header, null, SaveStateType.AUTO)
-            engineA.syncAll(listOf(romA))
+            engineA.syncAll(listOf(romA), SyncOptions(conflictPolicy = ConflictPolicy.NEWEST_WINS))
 
             assertArrayEquals("SRAM-V2-B".toByteArray(), savesA.readSaveRam(romA))
             val staleOnCloud = listOf("auto1.svs", "auto2.svs").mapNotNull {

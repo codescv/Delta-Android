@@ -5,6 +5,7 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import java.io.File
 import java.io.FileInputStream
+import java.io.IOException
 import java.net.URLEncoder
 import java.security.MessageDigest
 import java.time.Instant
@@ -50,15 +51,55 @@ fun interface SyncClock {
 }
 
 enum class ConflictPolicy(val raw: String, val title: String) {
+    ASK("ask", "Ask Every Time"),
     NEWEST_WINS("newestWins", "Newest Wins"),
     PREFER_LOCAL("preferLocal", "Prefer Device"),
     PREFER_CLOUD("preferCloud", "Prefer Cloud");
 
     companion object {
         fun fromRaw(raw: String?): ConflictPolicy =
-            entries.firstOrNull { it.raw == raw } ?: NEWEST_WINS
+            entries.firstOrNull { it.raw == raw } ?: ASK
     }
 }
+
+enum class SyncConflictKind {
+    BATTERY_SAVE,
+    SAVE_STATE,
+}
+
+enum class ConflictChoice {
+    KEEP_LOCAL,
+    USE_CLOUD,
+}
+
+data class SyncConflict(
+    val id: String,
+    val gameKey: String,
+    val gameName: String,
+    val systemId: String,
+    val romId: String,
+    val kind: SyncConflictKind,
+    val stateId: String? = null,
+    val stateLabel: String? = null,
+    val localMtimeMs: Long,
+    val localSizeBytes: Long,
+    val remoteMtimeMs: Long,
+    val remoteSizeBytes: Long,
+    val remoteDeviceName: String? = null,
+    val remoteFileId: String,
+    val remoteMd5: String? = null,
+    val remoteParentFolderId: String? = null,
+    val remoteGameFolderId: String? = null,
+)
+
+/**
+ * Thrown when [GoogleDriveSyncEngine.resolveConflict] detects that the remote Google Drive copy
+ * changed or was replaced after the conflict was originally detected, preventing silent overwrite
+ * of an unseen cloud version.
+ */
+class StaleConflictException(
+    message: String = "Google Drive copy changed since this conflict was detected. Sync again to review the latest version.",
+) : IOException(message)
 
 /**
  * Cross-platform game key matching iOS Delta 100%:
@@ -147,7 +188,7 @@ data class SyncAccountInfo(
 data class SyncOptions(
     val syncBatterySaves: Boolean = true,
     val syncSaveStates: Boolean = true,
-    val conflictPolicy: ConflictPolicy = ConflictPolicy.NEWEST_WINS,
+    val conflictPolicy: ConflictPolicy = ConflictPolicy.ASK,
     val deviceName: String = "Android",
 )
 
@@ -157,13 +198,18 @@ data class SyncResult(
     val skipped: Int = 0,
     val conflicts: Int = 0,
     val skippedRunningGames: Int = 0,
+    val pendingConflicts: List<SyncConflict> = emptyList(),
     val errors: List<String> = emptyList(),
     val syncedAtMs: Long = 0L,
 ) {
     val hasErrors: Boolean get() = errors.isNotEmpty()
 
     fun summaryText(): String = when {
-        hasErrors && uploaded == 0 && downloaded == 0 -> errors.first()
+        hasErrors && uploaded == 0 && downloaded == 0 && pendingConflicts.isEmpty() -> errors.first()
+        pendingConflicts.isNotEmpty() && uploaded == 0 && downloaded == 0 ->
+            if (pendingConflicts.size == 1) "1 conflict needs review" else "${pendingConflicts.size} conflicts need review"
+        pendingConflicts.isNotEmpty() ->
+            "Uploaded $uploaded · Downloaded $downloaded · ${pendingConflicts.size} conflict(s)"
         uploaded == 0 && downloaded == 0 -> "Up to date"
         else -> "Uploaded $uploaded · Downloaded $downloaded"
     }
@@ -181,6 +227,9 @@ data class SyncUiState(
     val lastResult: SyncResult? = null,
     val lastSyncedAtMs: Long = 0L,
     val lastError: String? = null,
+    val pendingConflicts: List<SyncConflict> = emptyList(),
+    val resolvingConflictId: String? = null,
+    val conflictPromptDismissed: Boolean = false,
 )
 
 internal fun md5Hex(bytes: ByteArray): String {

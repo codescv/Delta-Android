@@ -429,7 +429,7 @@ class GoogleDriveSyncTest {
             )
 
             val engine = makeEngine(server, saves, root)
-            val res = engine.syncAll(listOf(rom))
+            val res = engine.syncAll(listOf(rom), SyncOptions(conflictPolicy = ConflictPolicy.NEWEST_WINS))
 
             assertTrue(res.errors.isEmpty())
             // Uploaded: gen-local.svs + gen-local.png = 2; Downloaded: auto1.svs + gen-remote.svs + gen-remote.png = 3
@@ -482,7 +482,7 @@ class GoogleDriveSyncTest {
                 root = root,
                 isGameRunning = { it.id == runningRom.id },
             )
-            val res = engine.syncAll(listOf(runningRom, idleRom))
+            val res = engine.syncAll(listOf(runningRom, idleRom), SyncOptions(conflictPolicy = ConflictPolicy.NEWEST_WINS))
 
             assertEquals(1, res.skippedRunningGames)
             assertEquals(1, res.downloaded)
