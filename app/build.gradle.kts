@@ -8,8 +8,8 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
 }
 
-val deltaVersionName = "2.0.10"
-val deltaVersionCode = 20010
+val deltaVersionName = "2.1.0"
+val deltaVersionCode = 20100
 
 val localProps = Properties().apply {
     val f = rootProject.file("local.properties")

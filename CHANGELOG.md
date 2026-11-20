@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Version 2.0.5 tracked the iOS Delta release this port is based on; later
 versions are Android-only updates.
 
+## [2.1.0] - 2026-11-20
+
+### Added
+
+- **Google Drive Save Sync (cross-platform with Delta iOS)**: Pure-Kotlin OAuth 2.0 PKCE loopback login (`drive.file` scope) with Android Keystore AES-GCM encrypted credential storage and Drive REST v3 3-way MD5-deduped sync under `My Drive / Delta Sync/games/<system>_<crc32>/` (`save.srm`, `states_index.json`, `states/<id>.svs|.png`, `meta.json`).
+- **Interactive Save Conflict Picker (`Ask Every Time`)**: New default conflict resolution policy that prompts with a side-by-side **This Device** vs **Google Drive** comparison dialog (`Keep This Device` / `Use Google Drive` / `Later`), with unseen-cloud-change (`StaleConflictException`) protection, automatic `.conflict-*.bak` local backups, stale auto-state invalidation when cloud SRAM wins, and running-game safety guards.
+- **Settings › Delta Sync**: Full Google Drive sign-in/out, GCP OAuth setup (pre-filled Desktop Client ID), `Sync Now` status, `Auto-Sync` (foreground resume + game exit), `Sync Battery Saves (.srm)`, `Sync Save States (.svs)`, conflict policy selector, and pending-conflicts banner.
+
 ## [2.0.10] - 2026-11-19
 
 ### Fixed
