@@ -58,7 +58,7 @@ class AppUpdater(
         private const val PROGRESS_INTERVAL_BYTES = 256L * 1024
 
         /** `Delta-Android/<version>` with the debug suffix stripped and unsafe characters removed. */
-        fun userAgent(version: String?): String {
+        fun userAgent(version: String? = BuildConfig.VERSION_NAME): String {
             val sanitized =
                 SemanticVersion.stripDebugSuffix(version)
                     ?.replace(Regex("[^0-9A-Za-z._-]"), "")

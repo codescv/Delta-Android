@@ -1,13 +1,15 @@
 package com.codescv.delta.ui.settings
 
+import com.codescv.delta.BuildConfig
 import com.codescv.delta.model.GameSystem
 import com.codescv.delta.model.VirtualButton
 import com.codescv.delta.settings.ExperimentalFeature
 
 /** Static Settings content and pure helpers (ui_spec §6, design §5.5). */
 object SettingsData {
-    const val VERSION_STRING = "2.0.10 (Build 210)"
-    const val FOOTER = "Delta $VERSION_STRING"
+    val VERSION_STRING: String =
+        "${BuildConfig.VERSION_NAME.removeSuffix("-DEBUG")} (Build ${BuildConfig.VERSION_CODE})"
+    val FOOTER: String = "Delta $VERSION_STRING"
     const val GITHUB_FORK = "github.com/codescv/Delta-Android"
 
     // ---- Controllers / Fast Forward -------------------------------------------------------

@@ -1,5 +1,6 @@
 package com.codescv.delta.ui.settings
 
+import com.codescv.delta.BuildConfig
 import com.codescv.delta.input.GamepadMapping
 import com.codescv.delta.model.VirtualButton
 import com.codescv.delta.settings.ExperimentalFeature
@@ -109,7 +110,11 @@ class SettingsDataTest {
 
     @Test
     fun staticContentMatchesSpec() {
-        assertEquals("Delta 2.0.10 (Build 210)", SettingsData.FOOTER)
+        assertEquals(
+            "Delta ${BuildConfig.VERSION_NAME.removeSuffix("-DEBUG")} (Build ${BuildConfig.VERSION_CODE})",
+            SettingsData.FOOTER,
+        )
+        assertFalse(SettingsData.FOOTER.contains("-DEBUG"))
         assertEquals(listOf("167.86.108.126", "172.104.88.237", "178.62.43.212"), SettingsData.wfcServers.map { it.dns })
         assertEquals("Wiimmfi (167.86.108.126)", SettingsData.wfcTitle("167.86.108.126"))
         assertEquals(7, SettingsData.biosFiles.size)

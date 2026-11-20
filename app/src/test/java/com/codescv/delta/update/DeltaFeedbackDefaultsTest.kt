@@ -8,13 +8,16 @@ import org.junit.Test
 
 /** Delta-specific feedback defaults on top of the ported Lemuroid helper tests. */
 class DeltaFeedbackDefaultsTest {
+    private val releaseVersion = BuildConfig.VERSION_NAME.removeSuffix("-DEBUG")
+
     @Test
     fun subjectUsesDeltaAndroidPrefixAndBuildVersion() {
+        assertFalse(releaseVersion.contains("DEBUG"))
         assertEquals("delta-android", AgentFeedbackHelper.PROJECT_PREFIX)
-        // Debug builds carry `-DEBUG`; the subject tag is always the release tag `v2.0.10`.
-        assertEquals("delta-android: [v2.0.10] Skin flicker", AgentFeedbackHelper.formatSubject("Skin flicker"))
+        // Debug builds carry `-DEBUG`; the subject tag is always the release tag `v<version>`.
+        assertEquals("delta-android: [v$releaseVersion] Skin flicker", AgentFeedbackHelper.formatSubject("Skin flicker"))
         assertEquals(
-            "delta-android: [v2.0.10] Skin flicker",
+            "delta-android: [v$releaseVersion] Skin flicker",
             AgentFeedbackHelper.formatSubject("Skin flicker", BuildConfig.VERSION_NAME),
         )
     }
@@ -28,6 +31,7 @@ class DeltaFeedbackDefaultsTest {
 
     @Test
     fun mailtoUsesPercent20NeverPlus() {
+        assertFalse(releaseVersion.contains("DEBUG"))
         val uri =
             AgentFeedbackHelper.buildMailtoUri(
                 email = "agent@example.com",
@@ -35,7 +39,7 @@ class DeltaFeedbackDefaultsTest {
                 body = "Open pause menu a b",
             )
         assertEquals(
-            "mailto:agent@example.com?subject=delta-android%3A%20%5Bv2.0.10%5D%20Pause%20menu%20blur" +
+            "mailto:agent@example.com?subject=delta-android%3A%20%5Bv$releaseVersion%5D%20Pause%20menu%20blur" +
                 "&body=Open%20pause%20menu%20a%20b",
             uri,
         )
@@ -51,6 +55,7 @@ class DeltaFeedbackDefaultsTest {
 
     @Test
     fun attachmentSpecIsExplicitActionSendWithoutSelector() {
+        assertFalse(releaseVersion.contains("DEBUG"))
         val spec =
             FeedbackEmailTargetResolver.buildAttachmentSendSpec(
                 recipient = "agent@example.com",
@@ -62,6 +67,6 @@ class DeltaFeedbackDefaultsTest {
         assertEquals("android.intent.action.SEND", spec.action)
         assertEquals("com.example.mail.Compose", spec.className)
         assertFalse(spec.hasSelector)
-        assertEquals("delta-android: [v2.0.10] Crash", spec.subject)
+        assertEquals("delta-android: [v$releaseVersion] Crash", spec.subject)
     }
 }

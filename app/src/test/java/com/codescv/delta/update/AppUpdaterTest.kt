@@ -1,5 +1,6 @@
 package com.codescv.delta.update
 
+import com.codescv.delta.BuildConfig
 import org.junit.After
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
@@ -141,6 +142,11 @@ class AppUpdaterTest {
         // Header injection attempts are neutralised (CR/LF/space/colon stripped).
         assertEquals("Delta-Android/2.0.5Xy", AppUpdater.userAgent("2.0.5\r\nX: y"))
         assertEquals("Delta-Android", AppUpdater.userAgent(null))
+        assertEquals(
+            "Delta-Android/${BuildConfig.VERSION_NAME.removeSuffix("-DEBUG")}",
+            AppUpdater.userAgent(),
+        )
+        assertFalse(AppUpdater.userAgent().contains("-DEBUG"))
         assertEquals(20L * 1024 * 1024, AppUpdater.MIN_APK_BYTES)
         assertEquals(200L * 1024 * 1024, AppUpdater.MAX_APK_BYTES)
     }
@@ -232,7 +238,9 @@ class AppUpdaterTest {
         assertEquals("https://api.github.com/repos/codescv/Delta-Android/releases/latest", reqUrl)
         assertEquals("application/vnd.github+json", reqHeaders["accept"])
         assertEquals("2022-11-28", reqHeaders["x-github-api-version"])
-        assertEquals("Delta-Android/2.0.10", reqHeaders["user-agent"])
+        val expectedUserAgent = AppUpdater.userAgent()
+        assertFalse(expectedUserAgent.contains("-DEBUG"))
+        assertEquals(expectedUserAgent, reqHeaders["user-agent"])
 
         // Same base version with -DEBUG suffix must NOT report an update.
         val debugSame = updater.checkLatestRelease("2.0.6-DEBUG")
@@ -366,7 +374,9 @@ class AppUpdaterTest {
         assertEquals(3, visitedUrls.size)
         assertEquals("https://objects.githubusercontent.com/production/delta.apk", visitedUrls.last())
         assertEquals("identity", cdnHeaders["accept-encoding"])
-        assertEquals("Delta-Android/2.0.10", cdnHeaders["user-agent"])
+        val expectedUserAgent = AppUpdater.userAgent()
+        assertFalse(expectedUserAgent.contains("-DEBUG"))
+        assertEquals(expectedUserAgent, cdnHeaders["user-agent"])
         assertNull(cdnHeaders["authorization"])
         assertEquals(validApkBytes.size.toLong(), progressUpdates.last().first)
 

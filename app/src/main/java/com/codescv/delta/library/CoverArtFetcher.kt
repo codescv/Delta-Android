@@ -1,6 +1,7 @@
 package com.codescv.delta.library
 
 import com.codescv.delta.model.GameSystem
+import com.codescv.delta.update.AppUpdater
 import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
@@ -249,7 +250,7 @@ class UrlConnectionHttpClient(
             conn.readTimeout = readTimeoutMs
             conn.instanceFollowRedirects = true
             conn.setRequestProperty("Accept", "image/png,image/jpeg,image/*")
-            conn.setRequestProperty("User-Agent", "Delta-Android/2.0.10")
+            conn.setRequestProperty("User-Agent", AppUpdater.userAgent())
             val code = conn.responseCode
             val body = if (code in 200..299) conn.inputStream.use { it.readBytes() } else ByteArray(0)
             return code to body
