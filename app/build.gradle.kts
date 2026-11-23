@@ -8,8 +8,8 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
 }
 
-val deltaVersionName = "2.1.0"
-val deltaVersionCode = 20100
+val deltaVersionName = "2.1.1"
+val deltaVersionCode = 20101
 
 val localProps = Properties().apply {
     val f = rootProject.file("local.properties")
@@ -21,13 +21,18 @@ fun escapeBuildConfigString(value: String): String =
 val defaultGdriveClientId = (
     localProps.getProperty("DELTA_GDRIVE_CLIENT_ID")
         ?: System.getenv("DELTA_GDRIVE_CLIENT_ID")
-        ?: "304560912778-dr91a3ultmqer7155tmc0oevi84k7bd9.apps.googleusercontent.com"
+        ?: "304560912778-7ln54oj60t2v9mt0nqri70hl11joa0v9.apps.googleusercontent.com"
     ).trim()
-val defaultGdriveClientSecret = (
-    localProps.getProperty("DELTA_GDRIVE_CLIENT_SECRET")
-        ?: System.getenv("DELTA_GDRIVE_CLIENT_SECRET")
-        ?: ""
-    ).trim()
+val googleClientIdSuffix = ".apps.googleusercontent.com"
+require(
+    defaultGdriveClientId.endsWith(googleClientIdSuffix, ignoreCase = true) &&
+        defaultGdriveClientId.length > googleClientIdSuffix.length,
+) {
+    "DELTA_GDRIVE_CLIENT_ID must end with $googleClientIdSuffix (got: '$defaultGdriveClientId')"
+}
+val defaultGdriveRedirectScheme =
+    "com.googleusercontent.apps." +
+        defaultGdriveClientId.dropLast(googleClientIdSuffix.length).lowercase()
 
 android {
     namespace = "com.codescv.delta"
@@ -47,6 +52,7 @@ android {
             "UPDATE_API_BASE",
             "\"https://api.github.com/repos/codescv/Delta-Android\"",
         )
+        manifestPlaceholders["gdriveRedirectScheme"] = defaultGdriveRedirectScheme
         buildConfigField(
             "String",
             "DEFAULT_GDRIVE_CLIENT_ID",
@@ -54,8 +60,8 @@ android {
         )
         buildConfigField(
             "String",
-            "DEFAULT_GDRIVE_CLIENT_SECRET",
-            "\"${escapeBuildConfigString(defaultGdriveClientSecret)}\"",
+            "GDRIVE_REDIRECT_SCHEME",
+            "\"${escapeBuildConfigString(defaultGdriveRedirectScheme)}\"",
         )
 
         ndk {

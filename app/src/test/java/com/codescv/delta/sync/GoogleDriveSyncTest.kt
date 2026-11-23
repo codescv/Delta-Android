@@ -26,9 +26,6 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import java.io.File
-import java.net.HttpURLConnection
-import java.net.Socket
-import java.net.URL
 import java.net.URLDecoder
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
@@ -67,20 +64,23 @@ class GoogleDriveSyncTest {
     }
 
     // =========================================================================
-    // 2. PKCE S256 & OAuth Loopback & Token Refresh
+    // 2. PKCE S256 & Android OAuth PKCE Flow & Token Refresh
     // =========================================================================
 
     @Test
     fun pkceS256_matchesRfc7636TestVector() {
         val verifier = "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk"
         val expectedChallenge = "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM"
-        assertEquals(expectedChallenge, GoogleOAuthLoopback.computeCodeChallengeS256(verifier))
+        assertEquals(expectedChallenge, GoogleOAuthFlow.computeCodeChallengeS256(verifier))
     }
 
     @Test
-    fun oauthLoopback_fullFlowWithPreconnectFaviconWrongStateAndCodeExchange() {
+    fun oauthAndroidPkceFlow_fullCustomSchemeCallbackAndCodeExchangeWithoutClientSecret() = runBlocking {
         val fixedNow = 1_700_000_000_000L
+        val clientId = "304560912778-7ln54oj60t2v9mt0nqri70hl11joa0v9.apps.googleusercontent.com"
+        val expectedRedirect = "com.googleusercontent.apps.304560912778-7ln54oj60t2v9mt0nqri70hl11joa0v9:/oauth2redirect"
         val receivedForm = AtomicReference<Map<String, String>>()
+        val coordinator = OAuthRedirectCoordinator()
         MockDriveHttpServer().use { server ->
             server.onTokenRequest = { form ->
                 receivedForm.set(form)
@@ -88,63 +88,53 @@ class GoogleDriveSyncTest {
             }
 
             val capturedAuthUrl = AtomicReference<String>()
-            val loopback = GoogleOAuthLoopback(
-                clientId = "test-desktop-client.apps.googleusercontent.com",
-                clientSecret = "test-secret",
+            val flow = GoogleOAuthFlow(
+                clientId = clientId,
+                redirectCoordinator = coordinator,
                 tokenEndpoint = server.tokenEndpoint,
                 clock = { fixedNow },
                 openBrowser = { url ->
                     capturedAuthUrl.set(url)
-                    Thread {
-                        val params = parseUrlQuery(url)
-                        val redirectUri = params.getValue("redirect_uri")
-                        val state = params.getValue("state")
-                        val port = URL(redirectUri).port
-
-                        // 1. Idle preconnect socket that immediately closes
-                        Socket("127.0.0.1", port).close()
-
-                        // 2. /favicon.ico -> 404
-                        assertEquals(404, httpGetStatus("http://127.0.0.1:$port/favicon.ico"))
-
-                        // 3. Mismatched state -> 400
-                        assertEquals(400, httpGetStatus("$redirectUri?code=bad&state=wrong-state"))
-
-                        // 4. Valid callback -> 200
-                        assertEquals(200, httpGetStatus("$redirectUri?code=auth-code-123&state=$state"))
-                    }.start()
+                    val params = parseUrlQuery(url)
+                    val redirectUri = params.getValue("redirect_uri")
+                    val state = params.getValue("state")
+                    assertTrue(coordinator.deliver("$redirectUri?code=auth-code-123&state=$state"))
                 },
             )
 
-            val tokens = loopback.start(timeoutMs = 10_000L)
+            val tokens = flow.authenticate(timeoutMs = 10_000L)
             assertEquals("test-access-token-fresh", tokens.accessToken)
             assertEquals("test-refresh-token", tokens.refreshToken)
             assertEquals(fixedNow + 1800_000L, tokens.expiresAtMs)
             assertEquals(DRIVE_SCOPE, tokens.scope)
+            assertFalse(coordinator.hasActiveSession())
 
-            // Verify auth URL used single drive.file scope + S256
+            // Verify auth URL used single drive.file scope + S256 + Android custom URI scheme
             val authParams = parseUrlQuery(capturedAuthUrl.get())
+            assertEquals(clientId, authParams["client_id"])
+            assertEquals(expectedRedirect, authParams["redirect_uri"])
             assertEquals(DRIVE_SCOPE, authParams["scope"])
             assertEquals("S256", authParams["code_challenge_method"])
             assertEquals("offline", authParams["access_type"])
             assertEquals("consent", authParams["prompt"])
 
-            // Verify token exchange sent valid PKCE verifier matching auth challenge
+            // Verify token exchange omitted client_secret and sent valid PKCE verifier
             val tokenForm = receivedForm.get()
             assertEquals("auth-code-123", tokenForm["code"])
-            assertEquals("test-desktop-client.apps.googleusercontent.com", tokenForm["client_id"])
-            assertEquals("test-secret", tokenForm["client_secret"])
+            assertEquals(clientId, tokenForm["client_id"])
+            assertEquals(expectedRedirect, tokenForm["redirect_uri"])
+            assertFalse("Android public client must not send client_secret", "client_secret" in tokenForm)
             assertEquals("authorization_code", tokenForm["grant_type"])
             val verifier = tokenForm["code_verifier"]!!
             assertEquals(
                 authParams["code_challenge"],
-                GoogleOAuthLoopback.computeCodeChallengeS256(verifier),
+                GoogleOAuthFlow.computeCodeChallengeS256(verifier),
             )
         }
     }
 
     @Test
-    fun oauthTokenProvider_refreshesWithin60sSkewAndOnStaleTokenAndRotatesRefreshToken() {
+    fun oauthTokenProvider_refreshesWithin60sSkewAndOnStaleTokenAndRotatesRefreshToken_withoutClientSecret() {
         val nowMs = AtomicLong(1_000_000L)
         val refreshedRecords = mutableListOf<Triple<String, String?, Long>>()
 
@@ -152,6 +142,7 @@ class GoogleDriveSyncTest {
             val callNum = AtomicInteger(0)
             server.onTokenRequest = { form ->
                 assertEquals("refresh_token", form["grant_type"])
+                assertFalse("Refresh must omit client_secret when blank", "client_secret" in form)
                 val n = callNum.incrementAndGet()
                 val rotated = if (n == 2) "rotated-refresh-2" else ""
                 val extra = if (rotated.isNotEmpty()) ""","refresh_token":"$rotated"""" else ""
@@ -159,8 +150,8 @@ class GoogleDriveSyncTest {
             }
 
             val provider = OAuthTokenProvider(
-                clientId = "cid",
-                clientSecret = "csec",
+                clientId = "304560912778-7ln54oj60t2v9mt0nqri70hl11joa0v9.apps.googleusercontent.com",
+                clientSecret = "",
                 initialAccessToken = "initial-tok",
                 initialRefreshToken = "rt-1",
                 initialExpiresAtMs = nowMs.get() + 120_000L,
@@ -661,24 +652,25 @@ class GoogleDriveSyncTest {
     }
 
     @Test
-    fun oauthLoopback_deniedAuthorization_throwsGDriveAuthException() {
-        val loopback = GoogleOAuthLoopback(
-            clientId = "test-client",
+    fun oauthFlow_deniedAuthorization_throwsGDriveAuthException() = runBlocking {
+        val coordinator = OAuthRedirectCoordinator()
+        val flow = GoogleOAuthFlow(
+            clientId = "304560912778-7ln54oj60t2v9mt0nqri70hl11joa0v9.apps.googleusercontent.com",
+            redirectCoordinator = coordinator,
             openBrowser = { url ->
-                Thread {
-                    val params = parseUrlQuery(url)
-                    val redirectUri = params.getValue("redirect_uri")
-                    val state = params.getValue("state")
-                    assertEquals(200, httpGetStatus("$redirectUri?error=access_denied&state=$state"))
-                }.start()
+                val params = parseUrlQuery(url)
+                val redirectUri = params.getValue("redirect_uri")
+                val state = params.getValue("state")
+                assertTrue(coordinator.deliver("$redirectUri?error=access_denied&state=$state"))
             },
         )
         try {
-            loopback.start(timeoutMs = 5_000L)
+            flow.authenticate(timeoutMs = 5_000L)
             fail("Expected GDriveAuthException")
         } catch (e: GDriveAuthException) {
             assertTrue(e.needsInteraction)
         }
+        assertFalse(coordinator.hasActiveSession())
     }
 
     @Test
@@ -874,19 +866,6 @@ class GoogleDriveSyncTest {
             val k = URLDecoder.decode(pair.substringBefore('='), "UTF-8")
             val v = URLDecoder.decode(pair.substringAfter('=', ""), "UTF-8")
             k to v
-        }
-    }
-
-    private fun httpGetStatus(url: String): Int {
-        val conn = (URL(url).openConnection() as HttpURLConnection).apply {
-            requestMethod = "GET"
-            connectTimeout = 3_000
-            readTimeout = 3_000
-        }
-        return try {
-            conn.responseCode
-        } finally {
-            conn.disconnect()
         }
     }
 }

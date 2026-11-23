@@ -47,12 +47,18 @@ class MainActivity : ComponentActivity() {
         const val EXTRA_RESUME_STATE = "state"
     }
 
+    override fun onPause() {
+        super.onPause()
+        DeltaApplication.container.sync.onAppPaused()
+    }
+
     /**
      * Resumes a pending APK install after "Install unknown apps" was granted (also after process
      * death) and silently re-checks GitHub when returning to the foreground.
      */
     override fun onResume() {
         super.onResume()
+        DeltaApplication.container.sync.onAppResumed()
         UpdateManager.get(this).onHostResume(this)
         DeltaApplication.container.sync.triggerAutoSync("resume", debounce = true)
     }

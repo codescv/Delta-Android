@@ -54,7 +54,7 @@ class AppContainer(val app: Application) {
         scope = ioScope,
         deviceName = "${Build.MANUFACTURER} ${Build.MODEL}".trim().ifBlank { "Android" },
         defaultClientId = BuildConfig.DEFAULT_GDRIVE_CLIENT_ID,
-        defaultClientSecret = BuildConfig.DEFAULT_GDRIVE_CLIENT_SECRET,
+        registeredRedirectScheme = BuildConfig.GDRIVE_REDIRECT_SCHEME,
         onLocalFilesUpdated = { library.bumpCovers() },
     )
 }

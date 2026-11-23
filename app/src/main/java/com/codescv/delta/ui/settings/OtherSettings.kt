@@ -1,5 +1,6 @@
 package com.codescv.delta.ui.settings
 
+import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -32,12 +33,9 @@ import androidx.compose.material.icons.outlined.CreateNewFolder
 import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.NoteAdd
 import androidx.compose.material.icons.outlined.Sync
-import androidx.compose.material.icons.outlined.Visibility
-import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material.icons.outlined.WarningAmber
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
@@ -60,8 +58,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -72,6 +68,7 @@ import com.codescv.delta.model.GameSystem
 import com.codescv.delta.settings.AppPreferences
 import com.codescv.delta.sync.CancellationIOException
 import com.codescv.delta.sync.ConflictPolicy
+import com.codescv.delta.sync.GoogleOAuthFlow
 import com.codescv.delta.ui.components.FormDivider
 import com.codescv.delta.ui.components.FormRow
 import com.codescv.delta.ui.components.FormSection
@@ -83,6 +80,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.io.IOException
 import java.text.DateFormat
 import java.util.Date
 import java.util.zip.ZipEntry
@@ -197,34 +195,19 @@ internal fun DeltaSyncSettings(prefs: AppPreferences, nav: SettingsNav) {
     val syncState by sync.uiState.collectAsState()
 
     var clientIdInput by remember(syncState.clientId) { mutableStateOf(syncState.clientId) }
-    var clientSecretInput by remember { mutableStateOf("") }
-    var secretLoaded by remember { mutableStateOf(false) }
-    var showSecret by remember { mutableStateOf(false) }
 
-    // Load client secret off the main thread once.
-    LaunchedEffect(Unit) {
-        val loaded = withContext(Dispatchers.IO) { sync.currentClientSecret() }
-        clientSecretInput = loaded
-        secretLoaded = true
-    }
-
-    // Debounce persisting OAuth credentials off the main thread (avoids Keystore crypto per keystroke).
+    // Debounce persisting OAuth Client ID off the main thread (avoids Keystore crypto per keystroke).
     val latestClientId by rememberUpdatedState(clientIdInput)
-    val latestClientSecret by rememberUpdatedState(clientSecretInput)
-    LaunchedEffect(clientIdInput, clientSecretInput, secretLoaded) {
-        if (!secretLoaded) return@LaunchedEffect
+    LaunchedEffect(clientIdInput) {
         delay(400)
         withContext(Dispatchers.IO) {
-            sync.saveOAuthConfig(clientIdInput, clientSecretInput)
+            sync.saveOAuthConfig(clientIdInput)
         }
     }
     DisposableEffect(Unit) {
         onDispose {
-            if (secretLoaded) {
-                val id = latestClientId
-                val secret = latestClientSecret
-                container.ioScope.launch { sync.saveOAuthConfig(id, secret) }
-            }
+            val id = latestClientId
+            container.ioScope.launch { sync.saveOAuthConfig(id) }
         }
     }
 
@@ -377,21 +360,28 @@ internal fun DeltaSyncSettings(prefs: AppPreferences, nav: SettingsNav) {
                         icon = Icons.Outlined.Cloud,
                         color = DeltaColors.Purple,
                     ) {
-                        val idToSave = clientIdInput
-                        val secretToSave = clientSecretInput
+                        val idToSave = clientIdInput.trim()
                         if (idToSave.isBlank()) {
-                            nav.message("Enter a Desktop OAuth Client ID below first.")
+                            nav.message("Enter an Android OAuth Client ID below first.")
+                            return@ActionRow
+                        }
+                        if (GoogleOAuthFlow.deriveRedirectUriOrNull(idToSave) == null) {
+                            nav.message("Client ID must end with .apps.googleusercontent.com.")
                             return@ActionRow
                         }
                         // Run in process-wide ioScope so Activity recreation while the browser is open
-                        // neither drops the tokens nor leaks the loopback socket.
+                        // neither drops the OAuth redirect nor loses the tokens.
                         container.ioScope.launch {
-                            sync.saveOAuthConfig(idToSave, secretToSave)
+                            sync.saveOAuthConfig(idToSave)
                             runCatching {
                                 sync.signIn { authUrl ->
                                     val intent = Intent(Intent.ACTION_VIEW, Uri.parse(authUrl))
                                         .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                                    context.applicationContext.startActivity(intent)
+                                    try {
+                                        context.applicationContext.startActivity(intent)
+                                    } catch (e: ActivityNotFoundException) {
+                                        throw IOException("No browser app found to complete Google sign-in.", e)
+                                    }
                                 }
                             }.onSuccess { info ->
                                 val label = info.email.ifBlank { info.displayName.ifBlank { "Google Drive" } }
@@ -421,16 +411,18 @@ internal fun DeltaSyncSettings(prefs: AppPreferences, nav: SettingsNav) {
         }
 
         // 2. GCP OAuth Setup
+        val redirectPreview = GoogleOAuthFlow.deriveRedirectUriOrNull(clientIdInput)
+            ?: "com.googleusercontent.apps.<client-id-prefix>:/oauth2redirect"
         FormSection(
             header = "GCP OAuth Setup",
-            footer = "Redirect URI: http://127.0.0.1:<port>/oauth2callback — create both the Desktop (Android) and iOS OAuth clients in the same GCP project so both devices share the Delta Sync folder.",
+            footer = "Redirect URI: $redirectPreview — uses Android OAuth PKCE (no client secret required). Create both the Android and iOS OAuth clients in the same GCP project so both devices share the Delta Sync folder.",
         ) {
             Column(
                 Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 10.dp),
             ) {
-                Text("OAuth Client ID (Desktop)", style = DeltaType.Caption, color = DeltaColors.SystemGray)
+                Text("OAuth Client ID (Android)", style = DeltaType.Caption, color = DeltaColors.SystemGray)
                 Spacer(Modifier.height(4.dp))
                 Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterStart) {
                     if (clientIdInput.isEmpty()) {
@@ -444,9 +436,12 @@ internal fun DeltaSyncSettings(prefs: AppPreferences, nav: SettingsNav) {
                     }
                     BasicTextField(
                         value = clientIdInput,
-                        onValueChange = { v -> clientIdInput = v.trim() },
+                        onValueChange = { v -> if (!syncState.isSignedIn) clientIdInput = v.trim() },
+                        readOnly = syncState.isSignedIn,
                         singleLine = true,
-                        textStyle = DeltaType.Body.copy(color = Color.White),
+                        textStyle = DeltaType.Body.copy(
+                            color = if (syncState.isSignedIn) DeltaColors.SystemGray else Color.White,
+                        ),
                         cursorBrush = SolidColor(DeltaColors.Purple),
                         keyboardOptions = KeyboardOptions(
                             capitalization = KeyboardCapitalization.None,
@@ -456,47 +451,12 @@ internal fun DeltaSyncSettings(prefs: AppPreferences, nav: SettingsNav) {
                         modifier = Modifier.fillMaxWidth(),
                     )
                 }
-            }
-            FormDivider()
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .padding(start = 16.dp, end = 4.dp, top = 6.dp, bottom = 6.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Column(Modifier.weight(1f).padding(vertical = 4.dp)) {
-                    Text("Client Secret (Optional)", style = DeltaType.Caption, color = DeltaColors.SystemGray)
+                if (syncState.isSignedIn) {
                     Spacer(Modifier.height(4.dp))
-                    Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterStart) {
-                        if (clientSecretInput.isEmpty()) {
-                            Text(
-                                "GOCSPX-…",
-                                style = DeltaType.Body,
-                                color = Color(0xFF5A5A5F),
-                                maxLines = 1,
-                            )
-                        }
-                        BasicTextField(
-                            value = clientSecretInput,
-                            onValueChange = { v -> clientSecretInput = v.trim() },
-                            singleLine = true,
-                            visualTransformation = if (showSecret) VisualTransformation.None else PasswordVisualTransformation(),
-                            textStyle = DeltaType.Body.copy(color = Color.White),
-                            cursorBrush = SolidColor(DeltaColors.Purple),
-                            keyboardOptions = KeyboardOptions(
-                                capitalization = KeyboardCapitalization.None,
-                                autoCorrectEnabled = false,
-                                keyboardType = KeyboardType.Password,
-                            ),
-                            modifier = Modifier.fillMaxWidth(),
-                        )
-                    }
-                }
-                IconButton(onClick = { showSecret = !showSecret }) {
-                    Icon(
-                        imageVector = if (showSecret) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility,
-                        contentDescription = if (showSecret) "Hide secret" else "Show secret",
-                        tint = DeltaColors.SystemGray,
+                    Text(
+                        "Sign out to change the Client ID.",
+                        style = DeltaType.Caption,
+                        color = DeltaColors.SystemGray,
                     )
                 }
             }

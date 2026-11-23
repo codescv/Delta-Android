@@ -34,6 +34,22 @@
             </intent-filter>
         </activity>
 
+        <!-- Dedicated OAuth 2.0 custom URI scheme receiver for Android OAuth client (PKCE). -->
+        <activity
+            android:name=".sync.OAuthRedirectActivity"
+            android:exported="true"
+            android:launchMode="singleTop"
+            android:noHistory="true"
+            android:excludeFromRecents="true"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="${gdriveRedirectScheme}" />
+            </intent-filter>
+        </activity>
+
         <!-- Alternate app icons (Settings > App Icon): one launcher alias per icon, exactly one enabled. -->
         <activity-alias
             android:name=".icon.AppIcon"

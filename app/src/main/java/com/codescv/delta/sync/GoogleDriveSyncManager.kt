@@ -1,5 +1,6 @@
 package com.codescv.delta.sync
 
+import com.codescv.delta.BuildConfig
 import com.codescv.delta.library.RomEntry
 import com.codescv.delta.saves.SaveFileManager
 import com.codescv.delta.settings.PreferencesStore
@@ -9,6 +10,7 @@ import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.async
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -19,6 +21,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.util.Locale
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.coroutines.coroutineContext
 
@@ -35,9 +38,10 @@ class GoogleDriveSyncManager(
     private val scope: CoroutineScope,
     private val deviceName: String = "Android",
     private val defaultClientId: String = "",
-    private val defaultClientSecret: String = "",
+    private val registeredRedirectScheme: String = BuildConfig.GDRIVE_REDIRECT_SCHEME,
     private val onLocalFilesUpdated: () -> Unit = {},
     private val clock: SyncClock = SyncClock.SYSTEM,
+    private val redirectCoordinator: OAuthRedirectCoordinator = OAuthRedirectCoordinator.Default,
     private val tokenEndpoint: String = DEFAULT_OAUTH_TOKEN_ENDPOINT,
     private val authEndpoint: String = DEFAULT_OAUTH_AUTH_ENDPOINT,
     private val revokeEndpoint: String = DEFAULT_OAUTH_REVOKE_ENDPOINT,
@@ -53,6 +57,9 @@ class GoogleDriveSyncManager(
 ) {
     companion object {
         const val AUTO_SYNC_DEBOUNCE_MS = 30_000L
+        const val BROWSER_RETURN_CANCEL_GRACE_MS = 1_200L
+        internal const val LEGACY_DESKTOP_CLIENT_ID =
+            "304560912778-dr91a3ultmqer7155tmc0oevi84k7bd9.apps.googleusercontent.com"
     }
 
     private val baselineFile: File get() = File(filesDir, SYNC_STATE_FILE_NAME)
@@ -73,18 +80,18 @@ class GoogleDriveSyncManager(
     private val authGeneration = AtomicLong(0L)
 
     @Volatile
-    private var activeLoopback: GoogleOAuthLoopback? = null
+    private var activeAuthFlow: GoogleOAuthFlow? = null
 
     private fun initialUiState(): SyncUiState {
         var creds = secretStore.load()
         val seededId = defaultClientId.trim()
-        val seededSecret = defaultClientSecret.trim()
-        val needId = creds.clientId.isBlank() && seededId.isNotBlank()
-        val needSecret = creds.clientSecret.isBlank() && seededSecret.isNotBlank()
-        if (needId || needSecret) {
+        val isLegacyDesktopId = !creds.isSignedIn && creds.clientId.trim() == LEGACY_DESKTOP_CLIENT_ID
+        val needId = (creds.clientId.isBlank() || isLegacyDesktopId) && seededId.isNotBlank()
+        val clearLegacySecret = !creds.isSignedIn && creds.clientSecret.isNotBlank()
+        if (needId || clearLegacySecret) {
             val updated = creds.copy(
                 clientId = if (needId) seededId else creds.clientId,
-                clientSecret = if (needSecret) seededSecret else creds.clientSecret,
+                clientSecret = if (clearLegacySecret) "" else creds.clientSecret,
             )
             runCatching { secretStore.save(updated) }
             creds = updated
@@ -94,31 +101,23 @@ class GoogleDriveSyncManager(
             accountEmail = creds.accountEmail,
             accountName = creds.accountName,
             clientId = creds.clientId,
-            hasClientSecret = creds.clientSecret.isNotBlank(),
         )
     }
 
-    fun currentClientSecret(): String = secretStore.load().clientSecret
-
-    fun saveOAuthConfig(clientId: String, clientSecret: String) {
+    fun saveOAuthConfig(clientId: String) {
         val trimmedId = clientId.trim()
-        val trimmedSecret = clientSecret.trim()
         runCatching {
             val current = secretStore.load()
-            if (current.clientId == trimmedId && current.clientSecret == trimmedSecret) return
+            if (current.isSignedIn) return
+            if (current.clientId == trimmedId && current.clientSecret.isEmpty()) return
             secretStore.save(
                 current.copy(
                     clientId = trimmedId,
-                    clientSecret = trimmedSecret,
+                    clientSecret = "",
                 ),
             )
             cachedTokenProvider = null
-            _uiState.update {
-                it.copy(
-                    clientId = trimmedId,
-                    hasClientSecret = trimmedSecret.isNotBlank(),
-                )
-            }
+            _uiState.update { it.copy(clientId = trimmedId) }
         }.onFailure { err ->
             _uiState.update {
                 it.copy(lastError = "Could not save OAuth settings: ${redactSecrets(err.message ?: "Keystore error")}")
@@ -126,42 +125,57 @@ class GoogleDriveSyncManager(
         }
     }
 
-    suspend fun signIn(openBrowser: (String) -> Unit): SyncAccountInfo {
+    suspend fun signIn(
+        timeoutMs: Long = 5 * 60_000L,
+        openBrowser: (String) -> Unit,
+    ): SyncAccountInfo {
         val creds = secretStore.load()
         val clientId = creds.clientId.trim()
-        val clientSecret = creds.clientSecret.trim()
         if (clientId.isEmpty()) {
-            val msg = "Enter a Desktop OAuth Client ID first."
+            val msg = "Enter an Android OAuth Client ID first."
+            _uiState.update { it.copy(lastError = msg) }
+            throw IllegalStateException(msg)
+        }
+        val derivedScheme = runCatching { GoogleOAuthFlow.deriveRedirectScheme(clientId) }.getOrElse { err ->
+            val msg = redactSecrets(err.message ?: "Invalid Android OAuth Client ID")
+            _uiState.update { it.copy(lastError = msg) }
+            throw err
+        }
+        val expectedScheme = registeredRedirectScheme.trim().lowercase(Locale.US)
+        if (expectedScheme.isNotEmpty() && derivedScheme != expectedScheme) {
+            val msg = "OAuth Client ID does not match this build's registered redirect scheme " +
+                "($expectedScheme). Use the app's Android OAuth Client ID or rebuild with DELTA_GDRIVE_CLIENT_ID."
             _uiState.update { it.copy(lastError = msg) }
             throw IllegalStateException(msg)
         }
 
         _uiState.update { it.copy(isSigningIn = true, lastError = null) }
-        val loopback = GoogleOAuthLoopback(
+        val flow = GoogleOAuthFlow(
             clientId = clientId,
-            clientSecret = clientSecret,
             openBrowser = openBrowser,
+            redirectCoordinator = redirectCoordinator,
             tokenEndpoint = tokenEndpoint,
             authEndpoint = authEndpoint,
             clock = clock,
         )
-        activeLoopback = loopback
+        activeAuthFlow?.cancel("Superseded by a new Google sign-in")
+        activeAuthFlow = flow
         val cancelHandle = coroutineContext.job.invokeOnCompletion { cause ->
             if (cause is CancellationException) {
-                loopback.cancel()
+                flow.cancel()
             }
         }
         return try {
-            val (tokens, userInfo) = withContext(Dispatchers.IO) {
-                val t = loopback.start()
-                val info = fetchDriveUserInfo(t.accessToken, apiBase = apiBase)
-                t to info
+            val tokens = flow.authenticate(timeoutMs = timeoutMs)
+            val userInfo = withContext(Dispatchers.IO) {
+                fetchDriveUserInfo(tokens.accessToken, apiBase = apiBase)
             }
+            val fallbackRefresh = if (creds.clientId.trim() == clientId) creds.refreshToken else ""
             val updated = StoredOAuthCredentials(
                 clientId = clientId,
-                clientSecret = clientSecret,
+                clientSecret = "",
                 accessToken = tokens.accessToken,
-                refreshToken = tokens.refreshToken.ifBlank { creds.refreshToken },
+                refreshToken = tokens.refreshToken.ifBlank { fallbackRefresh },
                 expiresAtMs = tokens.expiresAtMs,
                 accountEmail = userInfo.email,
                 accountName = userInfo.displayName,
@@ -174,6 +188,7 @@ class GoogleDriveSyncManager(
                     isSignedIn = true,
                     accountEmail = updated.accountEmail,
                     accountName = updated.accountName,
+                    clientId = updated.clientId,
                     isSigningIn = false,
                     lastError = null,
                     pendingConflicts = emptyList(),
@@ -183,26 +198,54 @@ class GoogleDriveSyncManager(
             }
             userInfo
         } catch (e: CancellationIOException) {
-            _uiState.update { it.copy(isSigningIn = false) }
+            if (activeAuthFlow === flow) {
+                _uiState.update { it.copy(isSigningIn = false) }
+            }
             throw e
         } catch (e: CancellationException) {
-            _uiState.update { it.copy(isSigningIn = false) }
+            if (activeAuthFlow === flow) {
+                _uiState.update { it.copy(isSigningIn = false) }
+            }
             throw e
         } catch (e: Exception) {
             val msg = redactSecrets(e.message ?: "Google sign-in failed")
-            _uiState.update { it.copy(isSigningIn = false, lastError = msg) }
+            if (activeAuthFlow === flow) {
+                _uiState.update { it.copy(isSigningIn = false, lastError = msg) }
+            }
             throw e
         } finally {
             cancelHandle.dispose()
-            if (activeLoopback === loopback) activeLoopback = null
-            runCatching { loopback.close() }
+            if (activeAuthFlow === flow) activeAuthFlow = null
+            runCatching { flow.close() }
         }
     }
 
     fun cancelSignIn() {
-        activeLoopback?.cancel()
-        activeLoopback = null
+        activeAuthFlow?.cancel()
+        activeAuthFlow = null
+        redirectCoordinator.cancelActive()
         _uiState.update { it.copy(isSigningIn = false) }
+    }
+
+    /** Called from [MainActivity.onPause] so returning without a redirect can cancel a dangling sign-in. */
+    fun onAppPaused() {
+        redirectCoordinator.markLeftForBrowser()
+    }
+
+    /**
+     * Called from [MainActivity.onResume]. If the user left Delta for the OAuth browser and
+     * returned without [OAuthRedirectActivity] delivering a callback within [gracePeriodMs],
+     * cancels the pending sign-in cleanly so the UI does not remain stuck waiting.
+     */
+    fun onAppResumed(gracePeriodMs: Long = BROWSER_RETURN_CANCEL_GRACE_MS) {
+        val pendingSessionId = redirectCoordinator.consumeReturnedFromBrowserSessionId() ?: return
+        scope.launch(Dispatchers.IO) {
+            if (gracePeriodMs > 0L) delay(gracePeriodMs)
+            redirectCoordinator.cancelSessionIfActive(
+                sessionId = pendingSessionId,
+                reason = "Google sign-in was cancelled",
+            )
+        }
     }
 
     suspend fun signOut() {
@@ -219,12 +262,20 @@ class GoogleDriveSyncManager(
         runningResolutions.forEach { it.cancel() }
         cachedTokenProvider = null
         val creds = secretStore.load()
+        val seededId = defaultClientId.trim()
+        val nextClientId = if (creds.clientId.trim() == LEGACY_DESKTOP_CLIENT_ID && seededId.isNotBlank()) {
+            seededId
+        } else {
+            creds.clientId
+        }
         withContext(Dispatchers.IO) {
             val tokenToRevoke = creds.refreshToken.ifBlank { creds.accessToken }
             if (tokenToRevoke.isNotBlank()) {
                 revokeOAuthTokenBestEffort(tokenToRevoke, revokeEndpoint = revokeEndpoint)
             }
-            runCatching { secretStore.clearTokens() }
+            runCatching {
+                secretStore.save(StoredOAuthCredentials(clientId = nextClientId, clientSecret = ""))
+            }
             runCatching { baselineFile.delete() }
         }
         _uiState.update {
@@ -232,6 +283,7 @@ class GoogleDriveSyncManager(
                 isSignedIn = false,
                 accountEmail = "",
                 accountName = "",
+                clientId = nextClientId,
                 isSyncing = false,
                 progressMessage = null,
                 lastResult = null,
