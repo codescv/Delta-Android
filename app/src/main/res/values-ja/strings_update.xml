@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Japanese in-app updater + Agent feedback strings. -->
+<resources>
+    <string name="support_section_header">サポート</string>
+    <string name="update_row_title">アップデートを確認</string>
+    <string name="update_check_title">アップデートを確認</string>
+    <string name="update_status_idle">現在のバージョン %1$s</string>
+    <string name="update_status_checking">確認中…</string>
+    <string name="update_status_up_to_date">最新バージョンです（%1$s）</string>
+    <string name="update_status_available">新しいバージョン %1$s が利用可能</string>
+    <string name="update_status_downloading">%1$s をダウンロード中…</string>
+    <string name="update_status_downloaded">バージョン %1$s のインストール準備が完了</string>
+    <string name="update_status_error">確認に失敗しました：%1$s</string>
+    <string name="update_available_title">アップデートあり：%1$s</string>
+    <string name="update_current_latest">現在 %1$s → 最新 %2$s</string>
+    <string name="update_progress">%1$s / %2$s</string>
+    <string name="update_ready_to_install">ダウンロード完了。「インストール」をタップして続行してください。</string>
+    <string name="update_action_update">今すぐ更新</string>
+    <string name="update_action_retry">再試行</string>
+    <string name="update_action_install">インストール</string>
+    <string name="update_action_later">あとで</string>
+    <string name="update_action_cancel">キャンセル</string>
+    <string name="update_action_ok">OK</string>
+    <string name="update_allow_unknown_sources">「不明なアプリのインストール」を許可して戻ると、インストールが自動的に続行されます</string>
+    <string name="update_error_network">ネットワークエラーが発生しました</string>
+    <string name="update_error_timeout">接続がタイムアウトしました</string>
+    <string name="update_error_http">サーバーエラーが発生しました</string>
+    <string name="update_error_rate_limited">GitHub API のレート制限に達しました。しばらくしてから再試行してください</string>
+    <string name="update_error_not_found">リリースが見つかりませんでした</string>
+    <string name="update_error_invalid_response">リリース情報が無効です</string>
+    <string name="update_error_insecure_redirect">安全でない（非 HTTPS）リダイレクトを拒否しました</string>
+    <string name="update_error_too_many_redirects">リダイレクト回数が多すぎます</string>
+    <string name="update_error_corrupt">ダウンロードした APK が破損しているか、不完全、または SHA-256 検証に失敗しました</string>
+    <string name="update_error_wrong_package">APK のパッケージ名が一致しません</string>
+    <string name="update_error_not_newer">APK のバージョンが現在のバージョンより新しくありません</string>
+    <string name="update_error_signature_mismatch">署名キーが異なるため上書きできません — Delta をアンインストールしてから手動でインストールしてください</string>
+    <string name="update_error_no_apk">このリリースにはインストール可能な APK が含まれていません</string>
+    <string name="update_error_installer">システムインストーラーを起動できません</string>
+
+    <string name="agent_feedback_title">フィードバックを送信</string>
+    <string name="agent_feedback_subtitle_unset">Agent フィードバック用メールを設定してワンタップで送信</string>
+    <string name="agent_feedback_subtitle_configured">%1$s にフィードバックを送信</string>
+    <string name="agent_feedback_dialog_title">Agent にフィードバックを送信</string>
+    <string name="agent_feedback_subject_preview">件名：%1$s</string>
+    <string name="agent_feedback_email_label">Agent フィードバック用メール</string>
+    <string name="agent_feedback_email_hint">この端末のみにローカル保存されます</string>
+    <string name="agent_feedback_email_invalid">有効なメールアドレスを入力してください</string>
+    <string name="agent_feedback_email_saved">Agent フィードバック用メールを保存しました</string>
+    <string name="agent_feedback_summary_label">タイトル</string>
+    <string name="agent_feedback_summary_placeholder">不具合や機能要望の簡潔な説明</string>
+    <string name="agent_feedback_summary_required">タイトル、問題の説明、または画像のいずれかを入力してください</string>
+    <string name="agent_feedback_details_label">問題の説明</string>
+    <string name="agent_feedback_details_placeholder">再現手順や期待する動作</string>
+    <string name="agent_feedback_add_image">画像を追加</string>
+    <string name="agent_feedback_change_image">画像を変更</string>
+    <string name="agent_feedback_remove_image">画像を削除</string>
+    <string name="agent_feedback_image_attach_failed">選択した画像を添付できませんでした</string>
+    <string name="agent_feedback_action_save_email">メールを保存</string>
+    <string name="agent_feedback_action_send">フィードバックを送信</string>
+    <string name="agent_feedback_action_cancel">キャンセル</string>
+    <string name="agent_feedback_no_email_app">この端末にメールアプリが見つかりません</string>
+</resources>

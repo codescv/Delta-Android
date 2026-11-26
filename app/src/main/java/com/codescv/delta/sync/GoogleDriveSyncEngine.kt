@@ -1,5 +1,7 @@
 package com.codescv.delta.sync
 
+import com.codescv.delta.i18n.DeltaI18n
+import com.codescv.delta.i18n.StrKey
 import com.codescv.delta.library.RomEntry
 import com.codescv.delta.saves.SaveFileManager
 import com.codescv.delta.saves.SaveStateInfo
@@ -64,7 +66,7 @@ class GoogleDriveSyncEngine(
         val errors = mutableListOf<String>()
 
         try {
-            onProgress("Connecting to Google Drive…")
+            onProgress(DeltaI18n.tr(StrKey.SYNC_PROGRESS_CONNECTING))
             val rootFolder = driveApi.findOrCreateFolder(DELTA_SYNC_ROOT_FOLDER, parentId = null)
             // Account switch guard: if the Drive root folder ID changed, old baseline entries
             // belong to a different account and must be cleared so local saves are never silently overwritten.
@@ -91,7 +93,7 @@ class GoogleDriveSyncEngine(
                     return@forEachIndexed
                 }
 
-                onProgress("Syncing ${rom.title} (${idx + 1}/$total)…")
+                onProgress(DeltaI18n.tr(StrKey.SYNC_PROGRESS_GAME, rom.title, idx + 1, total))
                 try {
                     val gameStats = syncGame(
                         rom = rom,
@@ -148,7 +150,7 @@ class GoogleDriveSyncEngine(
     ) {
         val rom = roms.firstOrNull { it.id == conflict.romId }
             ?: roms.firstOrNull { GameKey.compute(it) == conflict.gameKey }
-            ?: throw IllegalStateException("Game '${conflict.gameName}' is no longer in the library.")
+            ?: throw IllegalStateException(DeltaI18n.tr(StrKey.SYNC_ERR_GAME_REMOVED, conflict.gameName))
 
         val initialState = loadBaselineState()
         val baseline = initialState.files.toMutableMap()
@@ -182,7 +184,7 @@ class GoogleDriveSyncEngine(
                         SyncConflictKind.BATTERY_SAVE -> {
                             val localSrm = saveFileManager.saveRamFile(rom)
                             if (!localSrm.isFile) {
-                                throw IOException("Local battery save no longer exists.")
+                                throw IOException(DeltaI18n.tr(StrKey.SYNC_ERR_LOCAL_SAVE_MISSING))
                             }
                             // Verify remote save.srm has not changed since conflict detection before overwriting.
                             val gameChildren = indexByNameLatest(driveApi.listChildren(gameFolderId))
@@ -222,10 +224,10 @@ class GoogleDriveSyncEngine(
 
                         SyncConflictKind.SAVE_STATE -> {
                             val stateId = conflict.stateId?.takeIf { isSafeStateId(it) }
-                                ?: throw IllegalArgumentException("Invalid state ID in conflict.")
+                                ?: throw IllegalArgumentException(DeltaI18n.tr(StrKey.SYNC_ERR_INVALID_STATE_ID))
                             val localStateFile = saveFileManager.stateFile(rom, stateId)
                             if (!localStateFile.isFile) {
-                                throw IOException("Local save state no longer exists.")
+                                throw IOException(DeltaI18n.tr(StrKey.SYNC_ERR_LOCAL_STATE_MISSING))
                             }
                             val statesFolderId = ensureStatesFolderId(gameFolderId)
                             // Verify remote <stateId>.svs has not changed since conflict detection before overwriting.
@@ -386,7 +388,7 @@ class GoogleDriveSyncEngine(
 
                         SyncConflictKind.SAVE_STATE -> {
                             val stateId = conflict.stateId?.takeIf { isSafeStateId(it) }
-                                ?: throw IllegalArgumentException("Invalid state ID in conflict.")
+                                ?: throw IllegalArgumentException(DeltaI18n.tr(StrKey.SYNC_ERR_INVALID_STATE_ID))
                             val downloadedBytes = driveApi.downloadFile(conflict.remoteFileId)
 
                             val gameFolderId = ensureGameFolderId()
@@ -1251,10 +1253,10 @@ class GoogleDriveSyncEngine(
             if (named != null) return named
             val kind = local?.kind ?: remote?.kind ?: inferStateKind(id)
             return when {
-                kind == SaveStateInfo.KIND_QUICK || id == SaveFileManager.QUICK_ID -> "Quick Save"
-                id == "auto1" -> "Auto Save 1"
-                id == "auto2" -> "Auto Save 2"
-                kind == SaveStateInfo.KIND_AUTO || id.startsWith("auto") -> "Auto Save"
+                kind == SaveStateInfo.KIND_QUICK || id == SaveFileManager.QUICK_ID -> DeltaI18n.tr(StrKey.SAVES_QUICK_SAVE)
+                id == "auto1" -> DeltaI18n.tr(StrKey.SYNC_STATE_AUTO_1)
+                id == "auto2" -> DeltaI18n.tr(StrKey.SYNC_STATE_AUTO_2)
+                kind == SaveStateInfo.KIND_AUTO || id.startsWith("auto") -> DeltaI18n.tr(StrKey.SAVES_AUTO_SAVE)
                 else -> id
             }
         }

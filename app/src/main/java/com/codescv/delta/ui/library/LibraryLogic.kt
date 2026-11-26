@@ -1,5 +1,8 @@
 package com.codescv.delta.ui.library
 
+import com.codescv.delta.i18n.DeltaI18n
+import com.codescv.delta.i18n.DeltaStrings
+import com.codescv.delta.i18n.StrKey
 import com.codescv.delta.library.LibraryState
 import com.codescv.delta.library.LibraryStore
 import com.codescv.delta.library.RomEntry
@@ -10,14 +13,18 @@ sealed interface LibraryPage {
     val id: String
     val title: String
 
+    fun localizedTitle(strings: DeltaStrings = DeltaI18n.currentStrings()): String
+
     data object Favorites : LibraryPage {
         override val id: String get() = "favorites"
-        override val title: String get() = "Favorites"
+        override val title: String get() = localizedTitle()
+        override fun localizedTitle(strings: DeltaStrings): String = strings[StrKey.LIB_FAVORITES]
     }
 
     data class System(val system: GameSystem) : LibraryPage {
         override val id: String get() = system.id
         override val title: String get() = LibraryLogic.title(system)
+        override fun localizedTitle(strings: DeltaStrings): String = title
     }
 }
 
@@ -52,8 +59,12 @@ object LibraryLogic {
     fun isSearching(searchText: String): Boolean = searchText.isNotBlank()
 
     /** Top-bar title: `Search` while searching, the current page title, else `Delta`. */
-    fun topTitle(searchText: String, current: LibraryPage?): String =
-        if (isSearching(searchText)) "Search" else current?.title ?: "Delta"
+    fun topTitle(
+        searchText: String,
+        current: LibraryPage?,
+        strings: DeltaStrings = DeltaI18n.currentStrings(),
+    ): String =
+        if (isSearching(searchText)) strings[StrKey.LIB_SEARCH] else current?.localizedTitle(strings) ?: "Delta"
 
     fun entries(page: LibraryPage, state: LibraryState): List<RomEntry> = when (page) {
         LibraryPage.Favorites -> state.favoriteEntries
@@ -78,11 +89,17 @@ object LibraryLogic {
     /** Continue Playing tap / "Resume Auto Save": always the newest auto save (if any). */
     fun resumeStateForContinue(latestAutoStateId: String?): String? = latestAutoStateId
 
-    fun emptySubtitle(page: LibraryPage): String =
-        if (page is LibraryPage.Favorites) "Long-press a game and choose Add to Favorites."
-        else "Tap + to import .zip, .gba, .gb, .gbc, .nes, .sfc, .n64, .nds or .md games."
+    fun emptySubtitle(
+        page: LibraryPage,
+        strings: DeltaStrings = DeltaI18n.currentStrings(),
+    ): String =
+        if (page is LibraryPage.Favorites) strings[StrKey.LIB_EMPTY_FAVORITES_SUBTITLE]
+        else strings[StrKey.LIB_EMPTY_SYSTEM_SUBTITLE]
 
-    fun noResultsMessage(searchText: String): String = "No games match “$searchText”."
+    fun noResultsMessage(
+        searchText: String,
+        strings: DeltaStrings = DeltaI18n.currentStrings(),
+    ): String = strings.format(StrKey.LIB_NO_RESULTS_MESSAGE, searchText)
 
     /** `DeltaAssets/ControllerIcon_<NAME>.pdf` for a page system, or null (text fallback). */
     fun controllerIconAsset(system: GameSystem): String? {
@@ -99,5 +116,8 @@ object LibraryLogic {
         return "DeltaAssets/ControllerIcon_$name.pdf"
     }
 
-    fun importedToast(count: Int): String = "Imported $count game(s)"
+    fun importedToast(
+        count: Int,
+        strings: DeltaStrings = DeltaI18n.currentStrings(),
+    ): String = strings.format(StrKey.LIB_IMPORTED_GAMES_TOAST, count)
 }

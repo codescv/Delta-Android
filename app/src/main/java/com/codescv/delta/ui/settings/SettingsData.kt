@@ -1,6 +1,9 @@
 package com.codescv.delta.ui.settings
 
 import com.codescv.delta.BuildConfig
+import com.codescv.delta.i18n.DeltaI18n
+import com.codescv.delta.i18n.DeltaStrings
+import com.codescv.delta.i18n.StrKey
 import com.codescv.delta.model.GameSystem
 import com.codescv.delta.model.VirtualButton
 import com.codescv.delta.settings.ExperimentalFeature
@@ -18,11 +21,23 @@ object SettingsData {
     val fastForwardModes = listOf("hold" to "Hold to Fast-Forward", "toggle" to "Tap to Toggle")
     val fastForwardMultipliers = listOf(2, 3, 4)
 
-    fun fastForwardModeTitle(raw: String) = fastForwardModes.firstOrNull { it.first == raw }?.second ?: "Tap to Toggle"
+    fun fastForwardModes(strings: DeltaStrings): List<Pair<String, String>> = listOf(
+        "hold" to strings[StrKey.CTRL_FF_HOLD],
+        "toggle" to strings[StrKey.CTRL_FF_TOGGLE],
+    )
+
+    fun fastForwardModeTitle(raw: String, strings: DeltaStrings = DeltaI18n.currentStrings()): String =
+        fastForwardModes(strings).firstOrNull { it.first == raw }?.second ?: strings[StrKey.CTRL_FF_TOGGLE]
 
     // ---- Touch & Haptics --------------------------------------------------------------------
 
     val hapticStrengths = listOf("light" to "Light", "medium" to "Medium", "strong" to "Strong")
+
+    fun hapticStrengths(strings: DeltaStrings): List<Pair<String, String>> = listOf(
+        "light" to strings[StrKey.HAPTICS_LIGHT],
+        "medium" to strings[StrKey.HAPTICS_MEDIUM],
+        "strong" to strings[StrKey.HAPTICS_STRONG],
+    )
 
     fun hapticStrengthIndex(raw: String) = hapticStrengths.indexOfFirst { it.first == raw }.let { if (it < 0) 1 else it }
 
@@ -92,14 +107,23 @@ object SettingsData {
     )
 
     /** Status shown next to a BIOS file; [importedBytes] is the imported file size or null. */
-    fun biosStatus(file: BiosFile, importedBytes: Long?): String = when {
-        importedBytes != null -> "Imported (${formatSize(importedBytes)})"
-        file.hasBuiltIn -> "${file.sizeDescription} (Optional — $BUILT_IN_BIOS_ACTIVE)"
-        else -> "${file.sizeDescription} (Optional)"
+    fun biosStatus(
+        file: BiosFile,
+        importedBytes: Long?,
+        strings: DeltaStrings = DeltaI18n.currentStrings(),
+    ): String = when {
+        importedBytes != null -> strings.format(StrKey.BIOS_STATUS_IMPORTED, formatSize(importedBytes))
+        file.hasBuiltIn -> strings.format(StrKey.BIOS_STATUS_OPTIONAL_BUILTIN, file.sizeDescription, strings[StrKey.CORES_BUILT_IN_BIOS_ACTIVE])
+        else -> strings.format(StrKey.BIOS_STATUS_OPTIONAL, file.sizeDescription)
     }
 
     /** `ndsBiosMode` values. */
     val ndsBiosModes = listOf("builtin" to "Built-in", "external" to "Imported Files")
+
+    fun ndsBiosModes(strings: DeltaStrings): List<Pair<String, String>> = listOf(
+        "builtin" to strings[StrKey.BIOS_MODE_BUILTIN],
+        "external" to strings[StrKey.BIOS_MODE_IMPORTED],
+    )
 
     fun formatSize(bytes: Long): String = when {
         bytes >= 1024L * 1024L -> "${bytes / (1024L * 1024L)} MB"
@@ -124,6 +148,13 @@ object SettingsData {
         WfcServer("Kaeru WFC", "178.62.43.212", "Supports Flipnote Hatena and classic DS Wi-Fi games."),
     )
 
+    fun wfcSummary(server: WfcServer, strings: DeltaStrings = DeltaI18n.currentStrings()): String = when (server.dns) {
+        "167.86.108.126" -> strings[StrKey.WFC_WIIMMFI_SUMMARY]
+        "172.104.88.237" -> strings[StrKey.WFC_ALTWFC_SUMMARY]
+        "178.62.43.212" -> strings[StrKey.WFC_KAERU_SUMMARY]
+        else -> server.summary
+    }
+
     fun wfcTitle(dns: String) = wfcServers.firstOrNull { it.dns == dns }?.title ?: dns
 
     // ---- Credits ----------------------------------------------------------------------------
@@ -137,6 +168,17 @@ object SettingsData {
         "Chris Rittenhouse" to "Genesis Skin, Show Status Bar, Game Screenshots, Toast Notifications",
         "Noah Keck" to "CheatBase",
         "Ian Clawson" to "Local Multiplayer",
+    )
+
+    fun contributors(strings: DeltaStrings): List<Pair<String, String>> = listOf(
+        "Riley Testut" to strings[StrKey.CREDIT_ROLE_DEVELOPER],
+        "Caroline Moore" to strings[StrKey.CREDIT_ROLE_DEVELOPER],
+        "Shane Gill" to strings[StrKey.CREDIT_ROLE_DEVELOPER],
+        "Grant Gliner" to strings[StrKey.CREDIT_ROLE_PAUSE_ICONS],
+        "Eric Lewis" to strings[StrKey.CREDIT_ROLE_DARK_MODE],
+        "Chris Rittenhouse" to strings[StrKey.CREDIT_ROLE_CHRIS],
+        "Noah Keck" to strings[StrKey.CREDIT_ROLE_CHEATBASE],
+        "Ian Clawson" to strings[StrKey.CREDIT_ROLE_LOCAL_MP],
     )
 
     /** License *names* only (full texts live in THIRD_PARTY.md). */
@@ -158,21 +200,84 @@ object SettingsData {
     /** How a persisted feature is presented on Android (design §5.5 analogs). */
     data class FeaturePresentation(val name: String, val summary: String, val note: String? = null)
 
-    fun present(feature: ExperimentalFeature): FeaturePresentation = when (feature.key) {
-        "metal" -> FeaturePresentation(
-            "GPU Renderer",
-            "Use the GPU (OpenGL ES) to render games instead of the software renderer. Does not apply to N64 games.",
+    fun experimentalTitle(
+        key: String,
+        fallback: String = key,
+        strings: DeltaStrings = DeltaI18n.currentStrings(),
+    ): String = when (key) {
+        "airPlaySkins" -> strings[StrKey.EXP_AIRPLAY_NAME]
+        "showStatusBar" -> strings[StrKey.EXP_STATUS_BAR_NAME]
+        "toastNotifications" -> strings[StrKey.EXP_TOASTS_NAME]
+        "reviewSaveStates" -> strings[StrKey.EXP_REVIEW_STATES_NAME]
+        "repairDatabase" -> strings[StrKey.EXP_REPAIR_DB_NAME]
+        "skinDebugging" -> strings[StrKey.EXP_SKIN_DEBUG_NAME]
+        "reverseScreens" -> strings[StrKey.EXP_REVERSE_SCREENS_NAME]
+        "showTouches" -> strings[StrKey.EXP_SHOW_TOUCHES_NAME]
+        "metal" -> strings[StrKey.EXP_GPU_NAME]
+        "Lu" -> strings[StrKey.EXP_LU_NAME]
+        "showWhatsNew" -> strings[StrKey.EXP_WHATS_NEW_NAME]
+        "screenshotsAlbum" -> strings[StrKey.EXP_SCREENSHOTS_ALBUM_NAME]
+        "operatorDevice" -> strings[StrKey.EXP_OPERATOR_NAME]
+        "libraryExport" -> strings[StrKey.EXP_LIBRARY_EXPORT_NAME]
+        "customFilters" -> strings[StrKey.EXP_CUSTOM_FILTERS_NAME]
+        else -> fallback
+    }
+
+    fun present(
+        feature: ExperimentalFeature,
+        strings: DeltaStrings = DeltaI18n.currentStrings(),
+    ): FeaturePresentation = when (feature.key) {
+        "metal" -> FeaturePresentation(strings[StrKey.EXP_GPU_NAME], strings[StrKey.EXP_GPU_SUMMARY])
+        "airPlaySkins" -> FeaturePresentation(
+            strings[StrKey.EXP_AIRPLAY_NAME],
+            strings[StrKey.EXP_AIRPLAY_SUMMARY] + strings[StrKey.EXP_EXTERNAL_DISPLAYS_SUFFIX],
         )
-        "airPlaySkins" -> FeaturePresentation(feature.name, feature.summary + " (External displays)")
-        "operatorDevice" -> FeaturePresentation(feature.name, feature.summary, note = "Not available on this device")
+        "showStatusBar" -> FeaturePresentation(strings[StrKey.EXP_STATUS_BAR_NAME], strings[StrKey.EXP_STATUS_BAR_SUMMARY])
+        "toastNotifications" -> FeaturePresentation(strings[StrKey.EXP_TOASTS_NAME], strings[StrKey.EXP_TOASTS_SUMMARY])
+        "reviewSaveStates" -> FeaturePresentation(strings[StrKey.EXP_REVIEW_STATES_NAME], strings[StrKey.EXP_REVIEW_STATES_SUMMARY])
+        "repairDatabase" -> FeaturePresentation(strings[StrKey.EXP_REPAIR_DB_NAME], strings[StrKey.EXP_REPAIR_DB_SUMMARY])
+        "skinDebugging" -> FeaturePresentation(strings[StrKey.EXP_SKIN_DEBUG_NAME], strings[StrKey.EXP_SKIN_DEBUG_SUMMARY])
+        "reverseScreens" -> FeaturePresentation(strings[StrKey.EXP_REVERSE_SCREENS_NAME], strings[StrKey.EXP_REVERSE_SCREENS_SUMMARY])
+        "showTouches" -> FeaturePresentation(strings[StrKey.EXP_SHOW_TOUCHES_NAME], strings[StrKey.EXP_SHOW_TOUCHES_SUMMARY])
+        "Lu" -> FeaturePresentation(strings[StrKey.EXP_LU_NAME], strings[StrKey.EXP_LU_SUMMARY])
+        "showWhatsNew" -> FeaturePresentation(strings[StrKey.EXP_WHATS_NEW_NAME], strings[StrKey.EXP_WHATS_NEW_SUMMARY])
+        "screenshotsAlbum" -> FeaturePresentation(strings[StrKey.EXP_SCREENSHOTS_ALBUM_NAME], strings[StrKey.EXP_SCREENSHOTS_ALBUM_SUMMARY])
+        "operatorDevice" -> FeaturePresentation(
+            strings[StrKey.EXP_OPERATOR_NAME],
+            strings[StrKey.EXP_OPERATOR_SUMMARY],
+            note = strings[StrKey.EXP_NOT_AVAILABLE_NOTE],
+        )
+        "libraryExport" -> FeaturePresentation(strings[StrKey.EXP_LIBRARY_EXPORT_NAME], strings[StrKey.EXP_LIBRARY_EXPORT_SUMMARY])
+        "customFilters" -> FeaturePresentation(strings[StrKey.EXP_CUSTOM_FILTERS_NAME], strings[StrKey.EXP_CUSTOM_FILTERS_SUMMARY])
         else -> FeaturePresentation(feature.name, feature.summary)
     }
 
     /** Footer of the feature detail screen: summary (+ "\n\n" detailed description) (+ note). */
-    fun detailFooter(feature: ExperimentalFeature): String {
-        val p = present(feature)
-        val base = feature.detailedDescription?.let { p.summary + "\n\n" + it } ?: p.summary
+    fun detailFooter(
+        feature: ExperimentalFeature,
+        strings: DeltaStrings = DeltaI18n.currentStrings(),
+    ): String {
+        val p = present(feature, strings)
+        val detail = if (feature.key == "Lu") strings[StrKey.EXP_LU_DETAIL] else feature.detailedDescription
+        val base = detail?.let { p.summary + "\n\n" + it } ?: p.summary
         return p.note?.let { "$base\n\n$it" } ?: base
+    }
+
+    fun experimentalOptionLabel(optionKey: String, strings: DeltaStrings): String = when (optionKey) {
+        "duration" -> strings[StrKey.EXP_OPT_DURATION]
+        "stateSave" -> strings[StrKey.EXP_OPT_STATE_SAVE]
+        "stateLoad" -> strings[StrKey.EXP_OPT_STATE_LOAD]
+        "fastForward" -> strings[StrKey.EXP_OPT_FAST_FORWARD]
+        "showHitBoxes" -> strings[StrKey.EXP_OPT_SHOW_HIT_BOXES]
+        "ignoreSafeAreas" -> strings[StrKey.EXP_OPT_IGNORE_SAFE_AREAS]
+        "shader" -> strings[StrKey.EXP_OPT_SHADER]
+        else -> optionKey
+    }
+
+    fun experimentalOptionValue(rawValue: String, strings: DeltaStrings): String = when (rawValue) {
+        "On" -> strings[StrKey.COMMON_ON]
+        "Off" -> strings[StrKey.COMMON_OFF]
+        else -> rawValue
     }
 
     /** Next value when an option row is tapped, or null when the option is read-only. */
@@ -188,13 +293,16 @@ object SettingsData {
 
     // ---- Controller key mapping -------------------------------------------------------------
 
-    fun buttonLabel(button: VirtualButton): String = when (button) {
+    fun buttonLabel(
+        button: VirtualButton,
+        strings: DeltaStrings = DeltaI18n.currentStrings(),
+    ): String = when (button) {
         VirtualButton.START -> "Start"
         VirtualButton.SELECT -> "Select"
-        VirtualButton.UP -> "Up"
-        VirtualButton.DOWN -> "Down"
-        VirtualButton.LEFT -> "Left"
-        VirtualButton.RIGHT -> "Right"
+        VirtualButton.UP -> strings[StrKey.CTRL_BTN_UP]
+        VirtualButton.DOWN -> strings[StrKey.CTRL_BTN_DOWN]
+        VirtualButton.LEFT -> strings[StrKey.CTRL_BTN_LEFT]
+        VirtualButton.RIGHT -> strings[StrKey.CTRL_BTN_RIGHT]
         else -> button.name
     }
 

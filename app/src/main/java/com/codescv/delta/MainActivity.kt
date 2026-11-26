@@ -13,6 +13,9 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.lifecycle.lifecycleScope
+import com.codescv.delta.i18n.DeltaI18n
+import com.codescv.delta.i18n.DeltaLocalizedApp
+import com.codescv.delta.i18n.StrKey
 import com.codescv.delta.input.GameInputRouter
 import com.codescv.delta.ui.DeltaApp
 import com.codescv.delta.ui.DeltaNavigator
@@ -35,8 +38,10 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         setContent {
-            DeltaApp(navigator)
-            LaunchUpdateCheck()
+            DeltaLocalizedApp {
+                DeltaApp(navigator)
+                LaunchUpdateCheck()
+            }
         }
         (getSystemService(INPUT_SERVICE) as InputManager).registerInputDeviceListener(inputListener, null)
         if (savedInstanceState == null) handleIncoming(intent)
@@ -103,13 +108,13 @@ class MainActivity : ComponentActivity() {
                     contentResolver.openInputStream(uri)?.use { input ->
                         if (name.endsWith(".deltaskin", ignoreCase = true)) {
                             val skin = container.skins.importDeltaSkin(input, name, null)
-                            "Imported ${skin.skin.name}"
+                            DeltaI18n.tr(StrKey.MAIN_IMPORTED_SKIN, skin.skin.name)
                         } else {
                             val imported = container.library.import(input, name)
-                            "Imported ${imported.size} game(s)"
+                            DeltaI18n.tr(StrKey.LIB_IMPORTED_GAMES_TOAST, imported.size)
                         }
-                    } ?: "Unable to open $name"
-                }.getOrElse { it.message ?: "Import failed" }
+                    } ?: DeltaI18n.tr(StrKey.MAIN_UNABLE_TO_OPEN, name)
+                }.getOrElse { it.message ?: DeltaI18n.tr(StrKey.MAIN_IMPORT_FAILED) }
             }
             Toast.makeText(this@MainActivity, message, Toast.LENGTH_SHORT).show()
         }
@@ -126,7 +131,11 @@ class MainActivity : ComponentActivity() {
                     match()
                 }
             }
-            if (rom != null) navigator.play(rom, resumeState) else Toast.makeText(this@MainActivity, "No game named $name", Toast.LENGTH_SHORT).show()
+            if (rom != null) {
+                navigator.play(rom, resumeState)
+            } else {
+                Toast.makeText(this@MainActivity, DeltaI18n.tr(StrKey.MAIN_NO_GAME_NAMED, name), Toast.LENGTH_SHORT).show()
+            }
         }
     }
 

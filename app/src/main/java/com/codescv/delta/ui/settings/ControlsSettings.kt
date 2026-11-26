@@ -66,6 +66,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import com.codescv.delta.DeltaApplication
+import com.codescv.delta.i18n.DeltaI18n
+import com.codescv.delta.i18n.LocalDeltaStrings
+import com.codescv.delta.i18n.StrKey
+import com.codescv.delta.i18n.str
 import com.codescv.delta.input.GamepadMapping
 import com.codescv.delta.input.Gamepads
 import com.codescv.delta.model.VirtualButton
@@ -109,13 +113,14 @@ private fun rememberConnectedControllers(assignments: Map<String, Int>): List<Ga
 @Composable
 internal fun ControllersSettings(prefs: AppPreferences, nav: SettingsNav) {
     val controllers = rememberConnectedControllers(prefs.playerAssignments)
+    val strings = LocalDeltaStrings.current
     SettingsPage {
         FormSection(
-            header = "Connected Controllers",
-            footer = "Pair MFi, Xbox, PlayStation or Switch controllers in the Settings app.",
+            header = str(StrKey.CTRL_CONNECTED_HEADER),
+            footer = str(StrKey.CTRL_CONNECTED_FOOTER),
         ) {
             if (controllers.isEmpty()) {
-                FormRow(title = "No Controllers Connected", titleColor = DeltaColors.SystemGray)
+                FormRow(title = str(StrKey.CTRL_NO_CONTROLLERS), titleColor = DeltaColors.SystemGray)
             }
             controllers.forEachIndexed { i, c ->
                 if (i > 0) FormDivider(inset = true)
@@ -124,36 +129,36 @@ internal fun ControllersSettings(prefs: AppPreferences, nav: SettingsNav) {
                 }
             }
         }
-        FormSection(header = "Players", footer = "Choose a player to remap its controller buttons.") {
+        FormSection(header = str(StrKey.CTRL_PLAYERS_HEADER), footer = str(StrKey.CTRL_PLAYERS_FOOTER)) {
             for (player in 1..4) {
                 if (player > 1) FormDivider()
                 val names = controllers.filter { it.player == player }.joinToString { it.name }
                 FormRow(
-                    title = "Player $player",
-                    value = names.ifEmpty { "None" },
+                    title = str(StrKey.SETTINGS_PLAYER_TITLE, player),
+                    value = names.ifEmpty { str(StrKey.COMMON_NONE) },
                     chevron = true,
                     onClick = { nav.push(SettingsRoute.PlayerMapping(player)) },
                 )
             }
         }
-        FormSection(footer = "Keep the controller skin visible while an external controller is connected.") {
+        FormSection(footer = str(StrKey.CTRL_SHOW_TOUCH_FOOTER)) {
             FormToggleRow(
-                title = "Show Touch Controls with Controller",
+                title = str(StrKey.CTRL_SHOW_TOUCH_WITH_CTRL),
                 checked = prefs.alwaysShowTouchControls,
                 onCheckedChange = { v -> nav.update { it.copy(alwaysShowTouchControls = v) } },
             )
         }
-        FormSection(header = "Fast Forward") {
+        FormSection(header = str(StrKey.CTRL_FAST_FORWARD_HEADER)) {
             PickerRow(
-                title = "Fast-Forward Button",
-                options = SettingsData.fastForwardModes,
+                title = str(StrKey.CTRL_FAST_FORWARD_BUTTON),
+                options = SettingsData.fastForwardModes(strings),
                 selected = prefs.fastForwardMode,
                 onSelect = { v -> nav.update { it.copy(fastForwardMode = v) } },
             )
             FormDivider()
             val speeds = SettingsData.fastForwardMultipliers
             FormSegmentedRow(
-                title = "Fast-Forward Speed",
+                title = str(StrKey.CTRL_FAST_FORWARD_SPEED),
                 options = speeds.map { "$it×" },
                 selectedIndex = speeds.indexOf(prefs.fastForwardMultiplier).coerceAtLeast(0),
                 onSelect = { i -> nav.update { it.copy(fastForwardMultiplier = speeds[i]) } },
@@ -177,13 +182,13 @@ private fun ControllerRow(controller: Gamepads.ControllerInfo, onAssign: (Int) -
             Icon(Icons.Filled.SportsEsports, contentDescription = null, tint = DeltaColors.Purple, modifier = Modifier.size(26.dp))
             Spacer(Modifier.width(14.dp))
             Text(controller.name, style = DeltaType.Body, color = Color.White, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text("Player ${controller.player}", style = DeltaType.Body, color = DeltaColors.SystemGray)
+            Text(str(StrKey.SETTINGS_PLAYER_TITLE, controller.player), style = DeltaType.Body, color = DeltaColors.SystemGray)
             Text(" ⌃⌄", color = DeltaColors.SystemGray, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
         }
         DropdownMenu(expanded = open, onDismissRequest = { open = false }, modifier = Modifier.background(DeltaColors.GroupedCard)) {
             for (p in 1..4) {
                 DropdownMenuItem(
-                    text = { Text("Player $p", color = Color.White) },
+                    text = { Text(str(StrKey.SETTINGS_PLAYER_TITLE, p), color = Color.White) },
                     leadingIcon = {
                         Box(Modifier.width(18.dp)) { if (p == controller.player) Text("✓", color = DeltaColors.Purple) }
                     },
@@ -201,12 +206,13 @@ private fun ControllerRow(controller: Gamepads.ControllerInfo, onAssign: (Int) -
 internal fun PlayerMappingSettings(player: Int, prefs: AppPreferences, nav: SettingsNav) {
     val controllers = rememberConnectedControllers(prefs.playerAssignments).filter { it.player == player }
     val mapping = GamepadMapping.forPlayer(player, prefs.gamepadMappings)
+    val strings = LocalDeltaStrings.current
     var capturing by remember { mutableStateOf<VirtualButton?>(null) }
 
     SettingsPage {
-        FormSection(header = "Controller") {
+        FormSection(header = str(StrKey.CTRL_CONTROLLER_HEADER)) {
             if (controllers.isEmpty()) {
-                FormRow(title = "No Controller Assigned", titleColor = DeltaColors.SystemGray)
+                FormRow(title = str(StrKey.CTRL_NO_CONTROLLER_ASSIGNED), titleColor = DeltaColors.SystemGray)
             }
             controllers.forEachIndexed { i, c ->
                 if (i > 0) FormDivider()
@@ -214,13 +220,13 @@ internal fun PlayerMappingSettings(player: Int, prefs: AppPreferences, nav: Sett
             }
         }
         FormSection(
-            header = "Key Mapping",
-            footer = "Tap a button, then press the controller button you want to use for it.",
+            header = str(StrKey.CTRL_KEY_MAPPING_HEADER),
+            footer = str(StrKey.CTRL_KEY_MAPPING_FOOTER),
         ) {
             mapping.entries.forEachIndexed { i, (button, key) ->
                 if (i > 0) FormDivider()
                 FormRow(
-                    title = SettingsData.buttonLabel(button),
+                    title = SettingsData.buttonLabel(button, strings),
                     value = GamepadMapping.keyLabel(key),
                     chevron = true,
                     onClick = { capturing = button },
@@ -228,7 +234,7 @@ internal fun PlayerMappingSettings(player: Int, prefs: AppPreferences, nav: Sett
             }
         }
         FormSection {
-            ActionRow("Reset to Default Mapping", Icons.Outlined.Replay, DestructiveRed) {
+            ActionRow(str(StrKey.CTRL_RESET_MAPPING), Icons.Outlined.Replay, DestructiveRed) {
                 nav.update { p -> p.copy(gamepadMappings = SettingsData.withPlayerOverrides(p.gamepadMappings, player, emptyMap())) }
             }
         }
@@ -236,8 +242,8 @@ internal fun PlayerMappingSettings(player: Int, prefs: AppPreferences, nav: Sett
 
     capturing?.let { button ->
         KeyCaptureDialog(
-            title = "Press a button…",
-            message = "Player $player · ${SettingsData.buttonLabel(button)}",
+            title = str(StrKey.CTRL_PRESS_BUTTON),
+            message = str(StrKey.CTRL_CAPTURE_MESSAGE, player, SettingsData.buttonLabel(button, strings)),
             onCancel = { capturing = null },
             onKey = { keyCode ->
                 capturing = null
@@ -280,7 +286,7 @@ private fun KeyCaptureDialog(title: String, message: String, onCancel: () -> Uni
             Icon(Icons.Filled.SportsEsports, contentDescription = null, tint = DeltaColors.Purple, modifier = Modifier.size(40.dp))
             Text(title, style = DeltaType.Headline, color = Color.White)
             Text(message, style = DeltaType.Footnote, color = DeltaColors.SystemGray, textAlign = TextAlign.Center)
-            TextButton(onClick = onCancel) { Text("Cancel", color = DeltaColors.Purple, style = DeltaType.Body) }
+            TextButton(onClick = onCancel) { Text(str(StrKey.COMMON_CANCEL), color = DeltaColors.Purple, style = DeltaType.Body) }
         }
     }
 }
@@ -304,8 +310,8 @@ internal fun SkinsSettings(prefs: AppPreferences, nav: SettingsNav) {
     val families = SkinCatalog.configurableFamilies
     val options = rememberSkinOptions(families)
     SettingsPage {
-        FormSection(footer = "Applies to controller skins shown over the game screen.") {
-            FormRow(title = "Controller Skin Opacity", value = SettingsData.opacityLabel(prefs.controllerOpacity))
+        FormSection(footer = str(StrKey.SKINS_OPACITY_FOOTER)) {
+            FormRow(title = str(StrKey.SKINS_OPACITY_TITLE), value = SettingsData.opacityLabel(prefs.controllerOpacity))
             FormSliderRow(
                 value = prefs.controllerOpacity.toFloat(),
                 onValueChange = { v -> nav.update { it.copy(controllerOpacity = SettingsData.snapOpacity(v)) } },
@@ -313,7 +319,7 @@ internal fun SkinsSettings(prefs: AppPreferences, nav: SettingsNav) {
                 steps = SettingsData.OPACITY_STEPS,
             )
         }
-        FormSection(header = "Controller Skins", footer = "Each system has its own portrait and landscape controller skin.") {
+        FormSection(header = str(StrKey.SKINS_HEADER), footer = str(StrKey.SKINS_FOOTER)) {
             families.forEachIndexed { i, family ->
                 if (i > 0) FormDivider(inset = true)
                 val list = options[family].orEmpty()
@@ -330,6 +336,7 @@ internal fun SkinsSettings(prefs: AppPreferences, nav: SettingsNav) {
 @Composable
 private fun SystemControllerSkinRow(family: String, portrait: SkinOption?, landscape: SkinOption?, onClick: () -> Unit) {
     val palette = SettingsData.familyPalette(family)
+    val standard = str(StrKey.COMMON_STANDARD)
     Row(
         Modifier
             .fillMaxWidth()
@@ -350,8 +357,8 @@ private fun SystemControllerSkinRow(family: String, portrait: SkinOption?, lands
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
             Text(SkinCatalog.familyDisplayName(family), style = DeltaType.Body, fontWeight = FontWeight.SemiBold, color = Color.White)
-            Text("Portrait: ${portrait?.name ?: "Standard"}", style = DeltaType.Caption, color = DeltaColors.SystemGray, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text("Landscape: ${landscape?.name ?: "Standard"}", style = DeltaType.Caption, color = DeltaColors.SystemGray, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(str(StrKey.SKINS_PORTRAIT_LABEL, portrait?.name ?: standard), style = DeltaType.Caption, color = DeltaColors.SystemGray, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(str(StrKey.SKINS_LANDSCAPE_LABEL, landscape?.name ?: standard), style = DeltaType.Caption, color = DeltaColors.SystemGray, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
         Spacer(Modifier.width(4.dp))
         Text(
@@ -392,18 +399,24 @@ internal fun SkinDetailSettings(family: String, prefs: AppPreferences, nav: Sett
     val imported = options.filter { it.kind == SkinOption.Kind.IMPORTED }
 
     SettingsPage {
-        FormSection(header = "Portrait Skin", footer = "Badge: DELTA · ${portrait?.badge?.ifBlank { null } ?: SettingsData.familyBadge(family)}") {
+        FormSection(
+            header = str(StrKey.SKINS_PORTRAIT_HEADER),
+            footer = str(StrKey.SKINS_BADGE_FOOTER, portrait?.badge?.ifBlank { null } ?: SettingsData.familyBadge(family)),
+        ) {
             SkinGrid(options, portrait?.id) { id ->
                 nav.update { it.copy(portraitSkinsBySystem = it.portraitSkinsBySystem + (family to id)) }
             }
         }
-        FormSection(header = "Landscape Skin", footer = "Badge: DELTA · ${landscape?.badge?.ifBlank { null } ?: SettingsData.familyBadge(family)}") {
+        FormSection(
+            header = str(StrKey.SKINS_LANDSCAPE_HEADER),
+            footer = str(StrKey.SKINS_BADGE_FOOTER, landscape?.badge?.ifBlank { null } ?: SettingsData.familyBadge(family)),
+        ) {
             SkinGrid(options, landscape?.id) { id ->
                 nav.update { it.copy(landscapeSkinsBySystem = it.landscapeSkinsBySystem + (family to id)) }
             }
         }
         FormSection {
-            ActionRow("Import .deltaskin…", Icons.Outlined.FileDownload) {
+            ActionRow(str(StrKey.SKINS_IMPORT_ACTION), Icons.Outlined.FileDownload) {
                 importer.launch(arrayOf("application/octet-stream", "application/zip", "*/*"))
             }
             importMessage?.let {
@@ -411,7 +424,7 @@ internal fun SkinDetailSettings(family: String, prefs: AppPreferences, nav: Sett
                 CaptionRow(it)
             }
             FormDivider()
-            ActionRow("Reset to Default Skin", Icons.Outlined.Replay, DestructiveRed) {
+            ActionRow(str(StrKey.SKINS_RESET_ACTION), Icons.Outlined.Replay, DestructiveRed) {
                 nav.update { p ->
                     p.copy(
                         portraitSkinsBySystem = p.portraitSkinsBySystem - family,
@@ -421,7 +434,7 @@ internal fun SkinDetailSettings(family: String, prefs: AppPreferences, nav: Sett
             }
         }
         if (imported.isNotEmpty()) {
-            FormSection(header = "Imported Skins") {
+            FormSection(header = str(StrKey.SKINS_IMPORTED_HEADER)) {
                 imported.forEachIndexed { i, option ->
                     if (i > 0) FormDivider()
                     FormRow(
@@ -429,7 +442,7 @@ internal fun SkinDetailSettings(family: String, prefs: AppPreferences, nav: Sett
                         trailing = {
                             Icon(
                                 Icons.Outlined.DeleteOutline,
-                                contentDescription = "Delete ${option.name}",
+                                contentDescription = str(StrKey.SKINS_DELETE_CD, option.name),
                                 tint = DestructiveRed,
                                 modifier = Modifier
                                     .size(36.dp)
@@ -460,7 +473,7 @@ internal fun SkinDetailSettings(family: String, prefs: AppPreferences, nav: Sett
 @Composable
 private fun SkinGrid(options: List<SkinOption>, selectedId: String?, onSelect: (String) -> Unit) {
     if (options.isEmpty()) {
-        CaptionRow("Loading skins…")
+        CaptionRow(str(StrKey.SKINS_LOADING))
         return
     }
     BoxWithConstraints(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
@@ -500,9 +513,9 @@ private fun importSkin(context: Context, uri: Uri, family: String): String {
     return try {
         val repo = DeltaApplication.container.skins
         val loaded = context.contentResolver.openInputStream(uri)?.use { repo.importDeltaSkin(it, fileName, family) }
-            ?: return "Unable to locate the Delta documents folder."
+            ?: return DeltaI18n.tr(StrKey.SKINS_ERR_DOCS_FOLDER)
         val target = (loaded.source as? SkinSource.Imported)?.directory?.parentFile?.name ?: family
-        "Imported $fileName into Skins/$target for ${SkinCatalog.familyDisplayName(target)}."
+        DeltaI18n.tr(StrKey.SKINS_IMPORTED_INTO, fileName, target, SkinCatalog.familyDisplayName(target))
     } catch (e: Exception) {
         e.message ?: e.toString()
     }
@@ -517,22 +530,24 @@ private fun deleteSkin(family: String, optionId: String) {
 
 @Composable
 internal fun TouchHapticsSettings(prefs: AppPreferences, nav: SettingsNav) {
+    val strings = LocalDeltaStrings.current
+    val strengths = SettingsData.hapticStrengths(strings)
     SettingsPage {
-        FormSection(header = "Haptics", footer = "When enabled, your device will vibrate in response to touch screen controls.") {
-            FormToggleRow("Button Feedback", prefs.haptics, { v -> nav.update { it.copy(haptics = v) } })
+        FormSection(header = str(StrKey.HAPTICS_HEADER), footer = str(StrKey.HAPTICS_FOOTER)) {
+            FormToggleRow(str(StrKey.HAPTICS_BUTTON_FEEDBACK), prefs.haptics, { v -> nav.update { it.copy(haptics = v) } })
             FormDivider()
-            FormToggleRow("Control Stick Feedback", prefs.thumbstickHaptics, { v -> nav.update { it.copy(thumbstickHaptics = v) } })
+            FormToggleRow(str(StrKey.HAPTICS_STICK_FEEDBACK), prefs.thumbstickHaptics, { v -> nav.update { it.copy(thumbstickHaptics = v) } })
         }
-        FormSection(header = "Haptic Strength") {
+        FormSection(header = str(StrKey.HAPTICS_STRENGTH_HEADER)) {
             FormSegmentedRow(
                 title = null,
-                options = SettingsData.hapticStrengths.map { it.second },
+                options = strengths.map { it.second },
                 selectedIndex = SettingsData.hapticStrengthIndex(prefs.hapticStrength),
-                onSelect = { i -> nav.update { it.copy(hapticStrength = SettingsData.hapticStrengths[i].first) } },
+                onSelect = { i -> nav.update { it.copy(hapticStrength = strengths[i].first) } },
             )
         }
-        FormSection(footer = "Play a short click sound when you press a touch screen button.") {
-            FormToggleRow("Button Click Sound", prefs.buttonClickSound, { v -> nav.update { it.copy(buttonClickSound = v) } })
+        FormSection(footer = str(StrKey.HAPTICS_CLICK_SOUND_FOOTER)) {
+            FormToggleRow(str(StrKey.HAPTICS_CLICK_SOUND), prefs.buttonClickSound, { v -> nav.update { it.copy(buttonClickSound = v) } })
         }
     }
 }

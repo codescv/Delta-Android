@@ -62,6 +62,10 @@ import com.codescv.delta.emulation.EmulatorSession
 import com.codescv.delta.emulation.FastForwardMode
 import com.codescv.delta.emulation.GameSurfaceView
 import com.codescv.delta.emulation.ScreenQuad
+import com.codescv.delta.i18n.DeltaI18n
+import com.codescv.delta.i18n.StrKey
+import com.codescv.delta.i18n.findActivity
+import com.codescv.delta.i18n.str
 import com.codescv.delta.input.GameInputRouter
 import com.codescv.delta.input.Gamepads
 import com.codescv.delta.input.HapticsController
@@ -217,7 +221,7 @@ fun GameScreen(rom: RomEntry, resumeStateId: String?, navigator: DeltaNavigator)
     var sourceSize by remember(rom.id) { mutableStateOf(defaultSource(rom.system)) }
 
     // Immersive full-screen gameplay (status bar only with the experimental feature).
-    val activity = context as? Activity
+    val activity = context.findActivity()
     val showStatusBar = prefs.isExperimentalEnabled("showStatusBar")
     DisposableEffect(showStatusBar) {
         val window = activity?.window
@@ -505,13 +509,17 @@ fun GameScreen(rom: RomEntry, resumeStateId: String?, navigator: DeltaNavigator)
                             override fun onQuickSave() {
                                 container.ioScope.launch {
                                     val ok = sessionHolder[0]?.saveState(SaveStateType.QUICK, quiet = true) != null
-                                    withContext(Dispatchers.Main) { ui.toast(if (ok) "Quick Saved" else "Unable to Save State") }
+                                    withContext(Dispatchers.Main) {
+                                        ui.toast(DeltaI18n.tr(if (ok) StrKey.GAME_QUICK_SAVED else StrKey.GAME_UNABLE_TO_SAVE_STATE))
+                                    }
                                 }
                             }
                             override fun onQuickLoad() {
                                 container.ioScope.launch {
                                     val ok = sessionHolder[0]?.loadState(SaveFileManager.QUICK_ID, quiet = true) == true
-                                    withContext(Dispatchers.Main) { ui.toast(if (ok) "Quick Loaded" else "Unable to Load State") }
+                                    withContext(Dispatchers.Main) {
+                                        ui.toast(DeltaI18n.tr(if (ok) StrKey.GAME_QUICK_LOADED else StrKey.GAME_UNABLE_TO_LOAD_STATE))
+                                    }
                                 }
                             }
                             override fun onAnalog(x: Float, y: Float) {
@@ -586,14 +594,14 @@ fun GameScreen(rom: RomEntry, resumeStateId: String?, navigator: DeltaNavigator)
             ) {
                 Icon(Icons.Filled.SportsEsports, null, tint = DeltaColors.Purple, modifier = Modifier.size(34.dp))
                 Text(
-                    ui.gamepadName ?: "Controller connected",
+                    ui.gamepadName ?: str(StrKey.GAME_CONTROLLER_CONNECTED),
                     style = DeltaType.Footnote.copy(fontWeight = FontWeight.SemiBold),
                     color = Color.White,
                 )
                 Button(
                     onClick = { openMenu() },
                     colors = ButtonDefaults.buttonColors(containerColor = DeltaColors.Purple),
-                ) { Text("Delta Menu", fontSize = 15.sp) }
+                ) { Text(str(StrKey.GAME_DELTA_MENU), fontSize = 15.sp) }
             }
         }
 

@@ -90,6 +90,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.codescv.delta.DeltaApplication
+import com.codescv.delta.i18n.LocalDeltaStrings
+import com.codescv.delta.i18n.StrKey
+import com.codescv.delta.i18n.str
 import com.codescv.delta.library.RomEntry
 import com.codescv.delta.ui.DeltaNavigator
 import com.codescv.delta.ui.saves.SaveStatesMode
@@ -383,10 +386,11 @@ fun LibraryScreen(navigator: DeltaNavigator) {
         }
     }
 
+    val strings = LocalDeltaStrings.current
     Box(Modifier.fillMaxSize().background(DeltaColors.LibraryBackground)) {
         Column(Modifier.fillMaxSize().statusBarsPadding()) {
             TopBar(
-                title = LibraryLogic.topTitle(searchText, current),
+                title = LibraryLogic.topTitle(searchText, current, strings),
                 onSettings = { navigator.openSettings() },
                 onImportGames = { importGames.launch(arrayOf("*/*")) },
                 onImportSkin = { importSkin.launch(arrayOf("*/*")) },
@@ -396,7 +400,7 @@ fun LibraryScreen(navigator: DeltaNavigator) {
             if (LibraryLogic.showContinuePlaying(state, searchText)) {
                 Column(Modifier.padding(bottom = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
-                        "Continue Playing",
+                        str(StrKey.LIB_CONTINUE_PLAYING),
                         style = DeltaType.Footnote.copy(fontWeight = FontWeight.SemiBold),
                         color = DeltaColors.SecondaryText,
                         modifier = Modifier.padding(horizontal = 20.dp),
@@ -513,7 +517,7 @@ fun LibraryScreen(navigator: DeltaNavigator) {
             onDismissRequest = { alert = null },
             title = { Text("Delta") },
             text = { Text(message) },
-            confirmButton = { TextButton(onClick = { alert = null }) { Text("OK", color = DeltaColors.Purple) } },
+            confirmButton = { TextButton(onClick = { alert = null }) { Text(str(StrKey.COMMON_OK), color = DeltaColors.Purple) } },
             containerColor = DeltaColors.GroupedCard,
             titleContentColor = Color.White,
             textContentColor = Color.White,
@@ -536,7 +540,7 @@ private fun TopBar(
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        LibraryGlassCircle(Icons.Outlined.Settings, "Settings", onSettings)
+        LibraryGlassCircle(Icons.Outlined.Settings, str(StrKey.LIB_SETTINGS), onSettings)
         AnimatedContent(
             targetState = title,
             transitionSpec = { fadeIn(tween(200)) togetherWith fadeOut(tween(200)) },
@@ -555,7 +559,7 @@ private fun TopBar(
             )
         }
         Box {
-            LibraryGlassCircle(Icons.Filled.Add, "Import Games") { menu = true }
+            LibraryGlassCircle(Icons.Filled.Add, str(StrKey.LIB_IMPORT_GAMES_CD)) { menu = true }
             DropdownMenu(
                 expanded = menu,
                 onDismissRequest = { menu = false },
@@ -564,10 +568,10 @@ private fun TopBar(
             ) {
                 val colors = MenuDefaults.itemColors(textColor = Color.White, trailingIconColor = Color.White)
                 listOf(
-                    Triple("Import Games (.zip/.gba/.nes/.sfc/.gbc/.nds/.z64)…", Icons.Outlined.SaveAlt, onImportGames),
-                    Triple("Import Controller Skin (.deltaskin)…", Icons.Outlined.Palette, onImportSkin),
-                    Triple("Link ROM Folder…", Icons.Outlined.CreateNewFolder, onLinkFolder),
-                    Triple("Rescan Library", Icons.Filled.Refresh, onRescan),
+                    Triple(str(StrKey.LIB_MENU_IMPORT_GAMES), Icons.Outlined.SaveAlt, onImportGames),
+                    Triple(str(StrKey.LIB_MENU_IMPORT_SKIN), Icons.Outlined.Palette, onImportSkin),
+                    Triple(str(StrKey.LIB_MENU_LINK_FOLDER), Icons.Outlined.CreateNewFolder, onLinkFolder),
+                    Triple(str(StrKey.LIB_MENU_RESCAN), Icons.Filled.Refresh, onRescan),
                 ).forEach { (label, icon, action) ->
                     DropdownMenuItem(
                         text = { Text(label, style = DeltaType.Body) },
@@ -586,25 +590,27 @@ private fun TopBar(
 
 @Composable
 private fun EmptyPage(page: LibraryPage) {
+    val strings = LocalDeltaStrings.current
     Column(
         Modifier.fillMaxWidth().padding(start = 40.dp, end = 40.dp, top = 140.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        Text("No Games", style = DeltaType.Title2, color = Color.White)
-        Text(LibraryLogic.emptySubtitle(page), style = DeltaType.Footnote, color = DeltaColors.SecondaryText, textAlign = TextAlign.Center)
+        Text(str(StrKey.LIB_NO_GAMES), style = DeltaType.Title2, color = Color.White)
+        Text(LibraryLogic.emptySubtitle(page, strings), style = DeltaType.Footnote, color = DeltaColors.SecondaryText, textAlign = TextAlign.Center)
     }
 }
 
 @Composable
 private fun NoResults(searchText: String) {
+    val strings = LocalDeltaStrings.current
     Column(
         Modifier.fillMaxWidth().padding(top = 80.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Text("No Results", style = DeltaType.Title3.copy(fontWeight = FontWeight.Bold), color = Color.White)
-        Text(LibraryLogic.noResultsMessage(searchText), style = DeltaType.Footnote, color = DeltaColors.SecondaryText, textAlign = TextAlign.Center)
+        Text(str(StrKey.LIB_NO_RESULTS), style = DeltaType.Title3.copy(fontWeight = FontWeight.Bold), color = Color.White)
+        Text(LibraryLogic.noResultsMessage(searchText, strings), style = DeltaType.Footnote, color = DeltaColors.SecondaryText, textAlign = TextAlign.Center)
     }
 }
 
@@ -613,19 +619,19 @@ private fun NoResults(searchText: String) {
 private fun DeleteGameDialog(title: String, onDelete: (includingSaves: Boolean) -> Unit, onDismiss: () -> Unit) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Delete $title?", textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth()) },
+        title = { Text(str(StrKey.LIB_DELETE_CONFIRM_TITLE, title), textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth()) },
         containerColor = DeltaColors.GroupedCard,
         titleContentColor = Color.White,
         confirmButton = {
             Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
                 TextButton(onClick = { onDelete(false) }, modifier = Modifier.fillMaxWidth()) {
-                    Text("Delete Game", color = DestructiveRed, style = DeltaType.Body)
+                    Text(str(StrKey.LIB_DELETE_GAME), color = DestructiveRed, style = DeltaType.Body)
                 }
                 TextButton(onClick = { onDelete(true) }, modifier = Modifier.fillMaxWidth()) {
-                    Text("Delete Game and Saves", color = DestructiveRed, style = DeltaType.Body)
+                    Text(str(StrKey.LIB_DELETE_GAME_AND_SAVES), color = DestructiveRed, style = DeltaType.Body)
                 }
                 TextButton(onClick = onDismiss, modifier = Modifier.fillMaxWidth()) {
-                    Text("Cancel", color = DeltaColors.Purple, style = DeltaType.Headline)
+                    Text(str(StrKey.COMMON_CANCEL), color = DeltaColors.Purple, style = DeltaType.Headline)
                 }
             }
         },
@@ -637,7 +643,7 @@ private fun RenameDialog(initial: String, onRename: (String) -> Unit, onDismiss:
     var text by rememberSaveable { mutableStateOf(initial) }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Rename Game") },
+        title = { Text(str(StrKey.LIB_RENAME_GAME)) },
         containerColor = DeltaColors.GroupedCard,
         titleContentColor = Color.White,
         text = {
@@ -653,7 +659,7 @@ private fun RenameDialog(initial: String, onRename: (String) -> Unit, onDismiss:
                 ),
             )
         },
-        confirmButton = { TextButton(onClick = { onRename(text) }) { Text("Save", color = DeltaColors.Purple) } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = DeltaColors.Purple) } },
+        confirmButton = { TextButton(onClick = { onRename(text) }) { Text(str(StrKey.COMMON_SAVE), color = DeltaColors.Purple) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(str(StrKey.COMMON_CANCEL), color = DeltaColors.Purple) } },
     )
 }

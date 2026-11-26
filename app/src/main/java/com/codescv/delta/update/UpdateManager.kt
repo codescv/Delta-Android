@@ -15,6 +15,7 @@ import androidx.core.content.FileProvider
 import androidx.core.content.pm.PackageInfoCompat
 import com.codescv.delta.BuildConfig
 import com.codescv.delta.R
+import com.codescv.delta.i18n.DeltaI18n
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -196,11 +197,12 @@ class UpdateManager private constructor(
                     val prevReady = lastReady?.takeIf { it.apkFile.isFile }
                     if (prevReady != null) {
                         if (!silent && !wasCancelled) {
+                            val loc = DeltaI18n.localizedContext(appContext)
                             Toast.makeText(
                                 appContext,
-                                appContext.getString(
+                                loc.getString(
                                     R.string.update_status_error,
-                                    appContext.getString(errorStringRes(e.code)),
+                                    loc.getString(errorStringRes(e.code)),
                                 ),
                                 Toast.LENGTH_LONG,
                             ).show()
@@ -350,9 +352,10 @@ class UpdateManager private constructor(
     ) {
         if (!activity.packageManager.canRequestPackageInstalls()) {
             setPendingInstall(true)
+            val loc = DeltaI18n.localizedContext(activity)
             Toast.makeText(
                 activity,
-                activity.getString(R.string.update_allow_unknown_sources),
+                loc.getString(R.string.update_allow_unknown_sources),
                 Toast.LENGTH_LONG,
             ).show()
             // Launched from Activity WITHOUT FLAG_ACTIVITY_NEW_TASK so Back returns directly to Delta.

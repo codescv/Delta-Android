@@ -1,5 +1,7 @@
 package com.codescv.delta.sync
 
+import com.codescv.delta.i18n.DeltaI18n
+import com.codescv.delta.i18n.StrKey
 import kotlinx.serialization.json.jsonObject
 import java.io.IOException
 import java.net.HttpURLConnection
@@ -99,7 +101,7 @@ class OAuthTokenProvider(
         val cid = clientId.trim()
         if (rt.isEmpty() || cid.isEmpty()) {
             throw GDriveAuthException(
-                message = "Google sign-in expired — sign in again",
+                message = DeltaI18n.tr(StrKey.OAUTH_ERR_SIGNIN_EXPIRED),
                 needsInteraction = true,
             )
         }
@@ -137,17 +139,17 @@ class OAuthTokenProvider(
                 if (status == 400 || status == 401) {
                     if (errCode == "invalid_grant" || errCode == "unauthorized_client" || errCode == "invalid_client") {
                         throw GDriveAuthException(
-                            message = "Google sign-in expired — sign in again",
+                            message = DeltaI18n.tr(StrKey.OAUTH_ERR_SIGNIN_EXPIRED),
                             needsInteraction = true,
                         )
                     }
                 }
                 val detail = errDesc.ifBlank { errCode.ifBlank { "HTTP $status" } }
-                throw IOException("Token refresh failed: ${redactSecrets(detail)}")
+                throw IOException(DeltaI18n.tr(StrKey.OAUTH_ERR_TOKEN_REFRESH, redactSecrets(detail)))
             }
 
             val newAccess = parsed?.str("access_token")?.takeIf { it.isNotBlank() }
-                ?: throw IOException("Token endpoint response missing access_token")
+                ?: throw IOException(DeltaI18n.tr(StrKey.OAUTH_ERR_MISSING_ACCESS_TOKEN))
             val expiresInSec = parsed.long("expires_in", 3600L).coerceAtLeast(60L)
             val newExpiresAt = clock.nowMs() + expiresInSec * 1000L
             val rotatedRefresh = parsed.str("refresh_token")?.takeIf { it.isNotBlank() }
@@ -194,13 +196,13 @@ fun fetchDriveUserInfo(
         val status = conn.responseCode
         val raw = readHttpBody(conn, status)
         if (status == 401) {
-            throw GDriveAuthException("Google Drive token is invalid or expired", needsInteraction = true)
+            throw GDriveAuthException(DeltaI18n.tr(StrKey.OAUTH_ERR_TOKEN_INVALID), needsInteraction = true)
         }
         if (status !in 200..299) {
             val errMsg = runCatching {
                 syncJson.parseToJsonElement(raw).jsonObject["error"]?.jsonObject?.str("message")
             }.getOrNull() ?: "HTTP $status"
-            throw IOException("Google Drive verification failed: ${redactSecrets(errMsg)}")
+            throw IOException(DeltaI18n.tr(StrKey.OAUTH_ERR_VERIFY_FAILED, redactSecrets(errMsg)))
         }
         val user = runCatching { syncJson.parseToJsonElement(raw).jsonObject["user"]?.jsonObject }.getOrNull()
         return SyncAccountInfo(

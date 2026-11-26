@@ -16,6 +16,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import com.codescv.delta.DeltaApplication
+import com.codescv.delta.i18n.StrKey
+import com.codescv.delta.i18n.str
 import com.codescv.delta.ui.game.GameScreen
 import com.codescv.delta.ui.library.LibraryScreen
 import com.codescv.delta.ui.settings.SettingsScreen
@@ -53,9 +55,9 @@ fun DeltaApp(navigator: DeltaNavigator = remember { DeltaNavigator() }) {
             navigator.launchError?.let { message ->
                 AlertDialog(
                     onDismissRequest = { navigator.launchError = null },
-                    title = { Text("Cannot Start Game") },
+                    title = { Text(str(StrKey.APP_CANNOT_START_GAME)) },
                     text = { Text(message) },
-                    confirmButton = { TextButton(onClick = { navigator.launchError = null }) { Text("OK") } },
+                    confirmButton = { TextButton(onClick = { navigator.launchError = null }) { Text(str(StrKey.COMMON_OK)) } },
                 )
             }
 

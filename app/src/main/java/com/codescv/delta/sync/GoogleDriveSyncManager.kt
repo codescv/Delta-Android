@@ -1,6 +1,8 @@
 package com.codescv.delta.sync
 
 import com.codescv.delta.BuildConfig
+import com.codescv.delta.i18n.DeltaI18n
+import com.codescv.delta.i18n.StrKey
 import com.codescv.delta.library.RomEntry
 import com.codescv.delta.saves.SaveFileManager
 import com.codescv.delta.settings.PreferencesStore
@@ -120,7 +122,12 @@ class GoogleDriveSyncManager(
             _uiState.update { it.copy(clientId = trimmedId) }
         }.onFailure { err ->
             _uiState.update {
-                it.copy(lastError = "Could not save OAuth settings: ${redactSecrets(err.message ?: "Keystore error")}")
+                it.copy(
+                    lastError = DeltaI18n.tr(
+                        StrKey.SYNC_ERR_SAVE_OAUTH_CONFIG,
+                        redactSecrets(err.message ?: DeltaI18n.tr(StrKey.SYNC_ERR_KEYSTORE)),
+                    ),
+                )
             }
         }
     }
@@ -132,19 +139,18 @@ class GoogleDriveSyncManager(
         val creds = secretStore.load()
         val clientId = creds.clientId.trim()
         if (clientId.isEmpty()) {
-            val msg = "Enter an Android OAuth Client ID first."
+            val msg = DeltaI18n.tr(StrKey.SYNC_ENTER_CLIENT_ID_FIRST)
             _uiState.update { it.copy(lastError = msg) }
             throw IllegalStateException(msg)
         }
         val derivedScheme = runCatching { GoogleOAuthFlow.deriveRedirectScheme(clientId) }.getOrElse { err ->
-            val msg = redactSecrets(err.message ?: "Invalid Android OAuth Client ID")
+            val msg = redactSecrets(err.message ?: DeltaI18n.tr(StrKey.SYNC_ERR_INVALID_CLIENT_ID))
             _uiState.update { it.copy(lastError = msg) }
             throw err
         }
         val expectedScheme = registeredRedirectScheme.trim().lowercase(Locale.US)
         if (expectedScheme.isNotEmpty() && derivedScheme != expectedScheme) {
-            val msg = "OAuth Client ID does not match this build's registered redirect scheme " +
-                "($expectedScheme). Use the app's Android OAuth Client ID or rebuild with DELTA_GDRIVE_CLIENT_ID."
+            val msg = DeltaI18n.tr(StrKey.SYNC_ERR_SCHEME_MISMATCH, expectedScheme)
             _uiState.update { it.copy(lastError = msg) }
             throw IllegalStateException(msg)
         }
@@ -158,7 +164,7 @@ class GoogleDriveSyncManager(
             authEndpoint = authEndpoint,
             clock = clock,
         )
-        activeAuthFlow?.cancel("Superseded by a new Google sign-in")
+        activeAuthFlow?.cancel(DeltaI18n.tr(StrKey.OAUTH_ERR_SUPERSEDED))
         activeAuthFlow = flow
         val cancelHandle = coroutineContext.job.invokeOnCompletion { cause ->
             if (cause is CancellationException) {
@@ -208,7 +214,7 @@ class GoogleDriveSyncManager(
             }
             throw e
         } catch (e: Exception) {
-            val msg = redactSecrets(e.message ?: "Google sign-in failed")
+            val msg = redactSecrets(e.message ?: DeltaI18n.tr(StrKey.SYNC_SIGN_IN_FAILED))
             if (activeAuthFlow === flow) {
                 _uiState.update { it.copy(isSigningIn = false, lastError = msg) }
             }
@@ -243,7 +249,7 @@ class GoogleDriveSyncManager(
             if (gracePeriodMs > 0L) delay(gracePeriodMs)
             redirectCoordinator.cancelSessionIfActive(
                 sessionId = pendingSessionId,
-                reason = "Google sign-in was cancelled",
+                reason = DeltaI18n.tr(StrKey.OAUTH_ERR_CANCELLED),
             )
         }
     }
@@ -340,7 +346,7 @@ class GoogleDriveSyncManager(
         val gen = authGeneration.get()
         val creds = secretStore.load()
         if (!creds.isSignedIn) {
-            val err = IllegalStateException("Not signed in to Google Drive")
+            val err = IllegalStateException(DeltaI18n.tr(StrKey.SYNC_ERR_NOT_SIGNED_IN))
             if (authGeneration.get() == gen) {
                 _uiState.update { it.copy(isSignedIn = false, resolvingConflictId = null, lastError = err.message) }
             }
@@ -378,7 +384,7 @@ class GoogleDriveSyncManager(
                 )
             }
             if (authGeneration.get() != gen) {
-                return Result.failure(IllegalStateException("Signed out during conflict resolution"))
+                return Result.failure(IllegalStateException(DeltaI18n.tr(StrKey.SYNC_ERR_SIGNED_OUT_DURING_RESOLVE)))
             }
             if (choice == ConflictChoice.USE_CLOUD) {
                 runCatching { onLocalFilesUpdated() }
@@ -416,7 +422,7 @@ class GoogleDriveSyncManager(
             }
             throw ce
         } catch (stale: StaleConflictException) {
-            val msg = redactSecrets(stale.message ?: "Google Drive copy changed since this conflict was detected.")
+            val msg = redactSecrets(stale.message ?: DeltaI18n.tr(StrKey.SYNC_ERR_STALE_CONFLICT))
             if (authGeneration.get() == gen) {
                 _uiState.update { it.copy(resolvingConflictId = null, lastError = msg) }
                 // Refresh pending conflicts asynchronously once engineMutex is released.
@@ -488,7 +494,7 @@ class GoogleDriveSyncManager(
         val gen = authGeneration.get()
         val creds = secretStore.load()
         if (!creds.isSignedIn) {
-            val err = "Not signed in to Google Drive"
+            val err = DeltaI18n.tr(StrKey.SYNC_ERR_NOT_SIGNED_IN)
             _uiState.update { it.copy(isSignedIn = false, isSyncing = false, lastError = err) }
             return SyncResult(errors = listOf(err), syncedAtMs = clock.nowMs())
         }
@@ -496,7 +502,7 @@ class GoogleDriveSyncManager(
         _uiState.update {
             it.copy(
                 isSyncing = true,
-                progressMessage = "Starting sync…",
+                progressMessage = DeltaI18n.tr(StrKey.SYNC_PROGRESS_STARTING),
                 lastError = null,
             )
         }
@@ -556,7 +562,7 @@ class GoogleDriveSyncManager(
             }
             throw ce
         } catch (authErr: GDriveAuthException) {
-            val msg = redactSecrets(authErr.message ?: "Google Drive authentication required")
+            val msg = redactSecrets(authErr.message ?: DeltaI18n.tr(StrKey.SYNC_ERR_AUTH_REQUIRED))
             if (authGeneration.get() == gen) {
                 _uiState.update {
                     it.copy(

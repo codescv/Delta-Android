@@ -2,6 +2,8 @@ package com.codescv.delta
 
 import android.app.Application
 import android.os.Build
+import com.codescv.delta.i18n.AppLanguage
+import com.codescv.delta.i18n.DeltaI18n
 import com.codescv.delta.library.CoverArtFetcher
 import com.codescv.delta.library.LibraryStore
 import com.codescv.delta.library.OpenVgdbTable
@@ -67,6 +69,7 @@ class DeltaApplication : Application() {
         super.onCreate()
         instance = this
         container = AppContainer(this)
+        DeltaI18n.applyPreference(AppLanguage.fromRaw(container.preferences.value.language))
     }
 
     companion object {

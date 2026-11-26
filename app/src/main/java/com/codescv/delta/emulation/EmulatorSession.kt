@@ -9,6 +9,8 @@ import android.os.Looper
 import android.os.Process
 import android.util.Log
 import com.codescv.delta.cheats.CheatCode
+import com.codescv.delta.i18n.DeltaI18n
+import com.codescv.delta.i18n.StrKey
 import com.codescv.delta.library.RomEntry
 import com.codescv.delta.model.GameSystem
 import com.codescv.delta.model.VirtualButton
@@ -130,7 +132,7 @@ class EmulatorSession(
             if (err != null) {
                 NativeBridge.nativeDestroy(handle)
                 handle = 0
-                throw IllegalStateException("Cannot start ${rom.title}: $err")
+                throw IllegalStateException(DeltaI18n.tr(StrKey.EMU_CANNOT_START, rom.title, err))
             }
             val info = NativeBridge.nativeCoreInfo(handle)
             libraryName = info[0] ?: ""
@@ -368,7 +370,7 @@ class EmulatorSession(
 
     fun reset() {
         coreLock.withLock { if (handle != 0L) NativeBridge.nativeReset(handle) }
-        message("Restarted ${rom.title}")
+        message(DeltaI18n.tr(StrKey.EMU_RESTARTED, rom.title))
     }
 
     // Input --------------------------------------------------------------------------------
@@ -475,7 +477,7 @@ class EmulatorSession(
                 if (cheat.isEnabled) NativeBridge.nativeSetCheat(h, index, true, cheat.code)
             }
         }
-        if (!quiet) message("Updated ${cheats.count { it.isEnabled }} active cheat(s)")
+        if (!quiet) message(DeltaI18n.tr(StrKey.EMU_UPDATED_CHEATS, cheats.count { it.isEnabled }))
     }
 
     fun setCoreOption(key: String, value: String) {
@@ -487,7 +489,7 @@ class EmulatorSession(
 
     fun setReverseScreens(reversed: Boolean) {
         setCoreOption("delta_ds_reverse_screens", if (reversed) "enabled" else "disabled")
-        message(if (reversed) "Reversed DS screens" else "Standard DS screens")
+        message(DeltaI18n.tr(if (reversed) StrKey.EMU_REVERSED_DS else StrKey.EMU_STANDARD_DS))
     }
 
     // Saves --------------------------------------------------------------------------------
@@ -505,20 +507,20 @@ class EmulatorSession(
             saves.writeSaveRam(sram, rom)
             lastPersistedSram = sram
         } catch (e: Exception) {
-            message("Could not write save: ${e.message}")
+            message(DeltaI18n.tr(StrKey.EMU_COULD_NOT_WRITE_SAVE, e.message ?: e.toString()))
         }
     }
 
     fun saveState(type: SaveStateType, id: String? = null, name: String? = null, quiet: Boolean = false): SaveStateInfo? {
         return try {
             val payload = coreLock.withLock { if (handle != 0L) NativeBridge.nativeSaveState(handle) else null }
-                ?: throw IllegalStateException("core does not support save states")
+                ?: throw IllegalStateException(DeltaI18n.tr(StrKey.EMU_CORE_NO_STATES))
             val header = SaveStateHeader(coreId, rom.systemId, rom.crc32 ?: 0, System.currentTimeMillis() / 1000.0)
             val info = saves.writeState(rom, payload, header, screenshotPng(320), type, id = id, name = name)
-            if (!quiet) message("Saved State")
+            if (!quiet) message(DeltaI18n.tr(StrKey.EMU_SAVED_STATE))
             info
         } catch (e: Exception) {
-            if (!quiet) message("Save failed: ${e.message}")
+            if (!quiet) message(DeltaI18n.tr(StrKey.EMU_SAVE_FAILED, e.message ?: e.toString()))
             null
         }
     }
@@ -527,14 +529,14 @@ class EmulatorSession(
         return try {
             val (header, payload) = saves.readState(rom, id)
             if (header != null && header.coreId != coreId) {
-                throw IllegalStateException("This save state was made with core ${header.coreId}, but this game uses $coreId.")
+                throw IllegalStateException(DeltaI18n.tr(StrKey.ERR_SAVE_WRONG_CORE, header.coreId, coreId))
             }
             val err = coreLock.withLock { NativeBridge.nativeLoadState(handle, payload) }
             if (err != null) throw IllegalStateException(err)
-            if (!quiet) message("Loaded State")
+            if (!quiet) message(DeltaI18n.tr(StrKey.EMU_LOADED_STATE))
             true
         } catch (e: Exception) {
-            if (!quiet) message("Load failed: ${e.message}")
+            if (!quiet) message(DeltaI18n.tr(StrKey.EMU_LOAD_FAILED, e.message ?: e.toString()))
             false
         }
     }

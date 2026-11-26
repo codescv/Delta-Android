@@ -1,5 +1,8 @@
 package com.codescv.delta.sync
 
+import com.codescv.delta.i18n.DeltaI18n
+import com.codescv.delta.i18n.DeltaStrings
+import com.codescv.delta.i18n.StrKey
 import com.codescv.delta.library.RomEntry
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
@@ -56,6 +59,13 @@ enum class ConflictPolicy(val raw: String, val title: String) {
     PREFER_LOCAL("preferLocal", "Prefer Device"),
     PREFER_CLOUD("preferCloud", "Prefer Cloud");
 
+    fun localizedTitle(strings: DeltaStrings = DeltaI18n.currentStrings()): String = when (this) {
+        ASK -> strings[StrKey.SYNC_POLICY_ASK]
+        NEWEST_WINS -> strings[StrKey.SYNC_POLICY_NEWEST]
+        PREFER_LOCAL -> strings[StrKey.SYNC_POLICY_LOCAL]
+        PREFER_CLOUD -> strings[StrKey.SYNC_POLICY_CLOUD]
+    }
+
     companion object {
         fun fromRaw(raw: String?): ConflictPolicy =
             entries.firstOrNull { it.raw == raw } ?: ASK
@@ -98,7 +108,7 @@ data class SyncConflict(
  * of an unseen cloud version.
  */
 class StaleConflictException(
-    message: String = "Google Drive copy changed since this conflict was detected. Sync again to review the latest version.",
+    message: String = DeltaI18n.tr(StrKey.SYNC_ERR_STALE_CONFLICT),
 ) : IOException(message)
 
 /**
@@ -204,14 +214,18 @@ data class SyncResult(
 ) {
     val hasErrors: Boolean get() = errors.isNotEmpty()
 
-    fun summaryText(): String = when {
+    fun summaryText(strings: DeltaStrings = DeltaI18n.currentStrings()): String = when {
         hasErrors && uploaded == 0 && downloaded == 0 && pendingConflicts.isEmpty() -> errors.first()
         pendingConflicts.isNotEmpty() && uploaded == 0 && downloaded == 0 ->
-            if (pendingConflicts.size == 1) "1 conflict needs review" else "${pendingConflicts.size} conflicts need review"
+            if (pendingConflicts.size == 1) {
+                strings[StrKey.SYNC_SUMMARY_CONFLICT_ONE]
+            } else {
+                strings.format(StrKey.SYNC_SUMMARY_CONFLICT_MANY, pendingConflicts.size)
+            }
         pendingConflicts.isNotEmpty() ->
-            "Uploaded $uploaded · Downloaded $downloaded · ${pendingConflicts.size} conflict(s)"
-        uploaded == 0 && downloaded == 0 -> "Up to date"
-        else -> "Uploaded $uploaded · Downloaded $downloaded"
+            strings.format(StrKey.SYNC_SUMMARY_UP_DOWN_CONFLICT, uploaded, downloaded, pendingConflicts.size)
+        uploaded == 0 && downloaded == 0 -> strings[StrKey.SYNC_SUMMARY_UP_TO_DATE]
+        else -> strings.format(StrKey.SYNC_SUMMARY_UP_DOWN, uploaded, downloaded)
     }
 }
 

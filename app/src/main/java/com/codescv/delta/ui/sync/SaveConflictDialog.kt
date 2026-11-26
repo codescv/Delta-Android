@@ -48,6 +48,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import com.codescv.delta.i18n.DeltaI18n
+import com.codescv.delta.i18n.DeltaStrings
+import com.codescv.delta.i18n.LocalDeltaStrings
+import com.codescv.delta.i18n.StrKey
+import com.codescv.delta.i18n.str
 import com.codescv.delta.sync.ConflictChoice
 import com.codescv.delta.sync.SyncConflict
 import com.codescv.delta.sync.SyncConflictKind
@@ -90,15 +95,16 @@ fun SaveConflictDialog(
     var actionError by remember(conflict.id) { mutableStateOf<String?>(null) }
     val isResolving = resolvingConflictId != null || activeChoice != null
 
+    val strings = LocalDeltaStrings.current
     val localIsNewer = conflict.localMtimeMs >= conflict.remoteMtimeMs
     val remoteIsNewer = conflict.remoteMtimeMs > conflict.localMtimeMs
     val fileTypeLabel = when (conflict.kind) {
-        SyncConflictKind.BATTERY_SAVE -> "Battery Save (.srm)"
+        SyncConflictKind.BATTERY_SAVE -> str(StrKey.CONFLICT_BATTERY_SAVE)
         SyncConflictKind.SAVE_STATE -> {
             val label = conflict.stateLabel?.takeIf { it.isNotBlank() }
                 ?: conflict.stateId?.takeIf { it.isNotBlank() }
-                ?: "State"
-            "Save State · $label"
+                ?: strings[StrKey.CONFLICT_STATE_FALLBACK]
+            strings.format(StrKey.CONFLICT_SAVE_STATE_LABEL, label)
         }
     }
 
@@ -142,7 +148,7 @@ fun SaveConflictDialog(
                 }
                 Spacer(Modifier.width(12.dp))
                 Text(
-                    text = "Save Conflict",
+                    text = str(StrKey.CONFLICT_TITLE),
                     style = DeltaType.Title3,
                     color = Color.White,
                     modifier = Modifier.weight(1f),
@@ -181,7 +187,7 @@ fun SaveConflictDialog(
             )
             Spacer(Modifier.height(8.dp))
             Text(
-                text = "Both this device and Google Drive have different versions. Choose which one to keep.",
+                text = str(StrKey.CONFLICT_DESCRIPTION),
                 style = DeltaType.Footnote,
                 color = DeltaColors.SecondaryText,
                 lineHeight = 18.sp,
@@ -191,7 +197,7 @@ fun SaveConflictDialog(
 
             // Card 1: This Device
             ConflictSideCard(
-                title = "This Device",
+                title = str(StrKey.CONFLICT_THIS_DEVICE),
                 icon = Icons.Outlined.PhoneAndroid,
                 accentColor = DeltaColors.Purple,
                 timestampMs = conflict.localMtimeMs,
@@ -209,7 +215,7 @@ fun SaveConflictDialog(
                 accentColor = DeltaColors.BadgeBlue,
                 timestampMs = conflict.remoteMtimeMs,
                 sizeBytes = conflict.remoteSizeBytes,
-                deviceDetail = conflict.remoteDeviceName?.takeIf { it.isNotBlank() }?.let { "From $it" },
+                deviceDetail = conflict.remoteDeviceName?.takeIf { it.isNotBlank() }?.let { strings.format(StrKey.CONFLICT_FROM_DEVICE, it) },
                 isNewer = remoteIsNewer,
             )
 
@@ -246,7 +252,7 @@ fun SaveConflictDialog(
                         res.onSuccess {
                             resolvedInBatch++
                         }.onFailure { err ->
-                            actionError = err.message ?: "Could not upload local save."
+                            actionError = err.message ?: strings[StrKey.CONFLICT_UPLOAD_FAILED]
                         }
                     }
                 },
@@ -270,9 +276,9 @@ fun SaveConflictDialog(
                         color = Color.White,
                     )
                     Spacer(Modifier.width(10.dp))
-                    Text("Uploading…", style = DeltaType.Subheadline, fontWeight = FontWeight.SemiBold)
+                    Text(str(StrKey.CONFLICT_UPLOADING), style = DeltaType.Subheadline, fontWeight = FontWeight.SemiBold)
                 } else {
-                    Text("Keep This Device", style = DeltaType.Subheadline, fontWeight = FontWeight.SemiBold)
+                    Text(str(StrKey.CONFLICT_KEEP_THIS_DEVICE), style = DeltaType.Subheadline, fontWeight = FontWeight.SemiBold)
                 }
             }
 
@@ -290,7 +296,7 @@ fun SaveConflictDialog(
                         res.onSuccess {
                             resolvedInBatch++
                         }.onFailure { err ->
-                            actionError = err.message ?: "Could not apply Google Drive save."
+                            actionError = err.message ?: strings[StrKey.CONFLICT_DOWNLOAD_FAILED]
                         }
                     }
                 },
@@ -314,16 +320,16 @@ fun SaveConflictDialog(
                         color = Color.White,
                     )
                     Spacer(Modifier.width(10.dp))
-                    Text("Downloading…", style = DeltaType.Subheadline, fontWeight = FontWeight.SemiBold)
+                    Text(str(StrKey.CONFLICT_DOWNLOADING), style = DeltaType.Subheadline, fontWeight = FontWeight.SemiBold)
                 } else {
-                    Text("Use Google Drive", style = DeltaType.Subheadline, fontWeight = FontWeight.SemiBold)
+                    Text(str(StrKey.CONFLICT_USE_GOOGLE_DRIVE), style = DeltaType.Subheadline, fontWeight = FontWeight.SemiBold)
                 }
             }
 
             Spacer(Modifier.height(6.dp))
 
             Text(
-                text = "A local .bak backup is saved before replacing with Google Drive.",
+                text = str(StrKey.CONFLICT_BACKUP_NOTE),
                 style = DeltaType.Caption2,
                 color = DeltaColors.SystemGray,
                 modifier = Modifier.padding(horizontal = 4.dp),
@@ -341,7 +347,7 @@ fun SaveConflictDialog(
                     disabledContentColor = DeltaColors.SystemGray.copy(alpha = 0.5f),
                 ),
             ) {
-                Text("Later", style = DeltaType.Subheadline, fontWeight = FontWeight.Medium)
+                Text(str(StrKey.COMMON_LATER), style = DeltaType.Subheadline, fontWeight = FontWeight.Medium)
             }
         }
     }
@@ -357,7 +363,8 @@ private fun ConflictSideCard(
     deviceDetail: String?,
     isNewer: Boolean,
 ) {
-    val formattedDate = remember(timestampMs) { formatConflictDate(timestampMs) }
+    val strings = LocalDeltaStrings.current
+    val formattedDate = remember(timestampMs, strings.language) { formatConflictDate(timestampMs, strings) }
     val formattedSize = remember(sizeBytes) { formatConflictBytes(sizeBytes) }
     val borderColor = if (isNewer) accentColor.copy(alpha = 0.55f) else DeltaColors.GlassStroke
 
@@ -395,7 +402,7 @@ private fun ConflictSideCard(
                         .padding(horizontal = 8.dp, vertical = 2.dp),
                 ) {
                     Text(
-                        text = "Newer",
+                        text = str(StrKey.CONFLICT_NEWER),
                         style = DeltaType.Caption2,
                         fontWeight = FontWeight.SemiBold,
                         color = DeltaColors.BadgeGreen,
@@ -438,9 +445,12 @@ private fun ConflictSideCard(
     }
 }
 
-internal fun formatConflictDate(epochMs: Long): String {
-    if (epochMs <= 0L) return "Unknown date"
-    return DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT).format(Date(epochMs))
+internal fun formatConflictDate(
+    epochMs: Long,
+    strings: DeltaStrings = DeltaI18n.currentStrings(),
+): String {
+    if (epochMs <= 0L) return strings[StrKey.CONFLICT_UNKNOWN_DATE]
+    return DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT, strings.language.locale).format(Date(epochMs))
 }
 
 internal fun formatConflictBytes(bytes: Long): String = when {

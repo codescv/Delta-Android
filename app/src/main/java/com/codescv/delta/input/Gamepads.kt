@@ -3,6 +3,8 @@ package com.codescv.delta.input
 import android.content.Context
 import android.hardware.input.InputManager
 import android.view.InputDevice
+import com.codescv.delta.i18n.DeltaI18n
+import com.codescv.delta.i18n.StrKey
 
 /** Connected physical controllers (Bluetooth/USB gamepads). Owned by `coder`. */
 object Gamepads {
@@ -25,7 +27,7 @@ object Gamepads {
         return devices.map { d: InputDevice ->
             val player = assignments[d.descriptor] ?: next
             next = maxOf(next, player) + 1
-            ControllerInfo(d.id, d.descriptor, d.name ?: "Game Controller", player.coerceIn(1, 4))
+            ControllerInfo(d.id, d.descriptor, d.name ?: DeltaI18n.tr(StrKey.CTRL_DEFAULT_NAME), player.coerceIn(1, 4))
         }
     }
 }

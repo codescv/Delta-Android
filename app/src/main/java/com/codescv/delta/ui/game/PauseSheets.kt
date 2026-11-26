@@ -51,6 +51,9 @@ import com.codescv.delta.cheats.CheatValidator
 import com.codescv.delta.emulation.EmulatorSession
 import com.codescv.delta.emulation.FastForwardController
 import com.codescv.delta.emulation.FastForwardMode
+import com.codescv.delta.i18n.LocalDeltaStrings
+import com.codescv.delta.i18n.StrKey
+import com.codescv.delta.i18n.str
 import com.codescv.delta.library.RomEntry
 import com.codescv.delta.model.GameSystem
 import com.codescv.delta.model.VirtualButton
@@ -109,17 +112,18 @@ fun CheatCodesSheet(rom: RomEntry, session: EmulatorSession?, onDismiss: () -> U
         session?.applyCheats(list)
     }
 
-    DeltaSheet(title = "Cheat Codes", onDismiss = onDismiss) {
-        FormSection(header = "Cheat Codes") {
+    val strings = LocalDeltaStrings.current
+    DeltaSheet(title = str(StrKey.PAUSE_CHEAT_CODES), onDismiss = onDismiss) {
+        FormSection(header = str(StrKey.PAUSE_CHEAT_CODES)) {
             if (cheats.isEmpty()) {
-                FormRow(title = "No Cheats", titleColor = DeltaColors.SystemGray)
+                FormRow(title = str(StrKey.CHEAT_NO_CHEATS), titleColor = DeltaColors.SystemGray)
             }
             cheats.forEachIndexed { i, cheat ->
                 if (i > 0) FormDivider()
                 Row(Modifier.fillMaxWidth().heightIn(min = 52.dp).padding(start = 16.dp, end = 4.dp, top = 6.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
                         Text(cheat.name, style = DeltaType.Subheadline.copy(fontWeight = FontWeight.SemiBold), color = Color.White)
-                        Text("${cheat.format.displayName} · ${cheat.code}", style = DeltaType.Caption.copy(fontFamily = FontFamily.Monospace), color = DeltaColors.SystemGray)
+                        Text("${cheat.format.localizedName(strings)} · ${cheat.code}", style = DeltaType.Caption.copy(fontFamily = FontFamily.Monospace), color = DeltaColors.SystemGray)
                     }
                     Switch(
                         checked = cheat.isEnabled,
@@ -127,44 +131,44 @@ fun CheatCodesSheet(rom: RomEntry, session: EmulatorSession?, onDismiss: () -> U
                         colors = SwitchDefaults.colors(checkedTrackColor = DeltaColors.Purple, checkedThumbColor = Color.White),
                     )
                     IconButton(onClick = { update { l -> l.removeAt(i) } }) {
-                        Icon(Icons.Filled.Delete, "Delete", tint = Color(0xFFFF453A))
+                        Icon(Icons.Filled.Delete, str(StrKey.COMMON_DELETE), tint = Color(0xFFFF453A))
                     }
                 }
             }
         }
-        FormSection(header = "New Cheat (Game Genie / GameShark / Action Replay)", footer = error) {
+        FormSection(header = str(StrKey.CHEAT_NEW_HEADER), footer = error) {
             TextField(
                 value = name, onValueChange = { name = it },
-                placeholder = { Text("Cheat Name (e.g. Max Score)") },
+                placeholder = { Text(str(StrKey.CHEAT_NAME_PLACEHOLDER)) },
                 singleLine = true, colors = deltaTextFieldColors(), modifier = Modifier.fillMaxWidth(),
             )
             FormDivider()
             TextField(
                 value = code, onValueChange = { code = it; error = null },
-                placeholder = { Text("Code (e.g. ${CheatValidator.placeholder(rom.system, format)})") },
+                placeholder = { Text(str(StrKey.CHEAT_CODE_PLACEHOLDER, CheatValidator.placeholder(rom.system, format, strings))) },
                 textStyle = DeltaType.Body.copy(fontFamily = FontFamily.Monospace),
                 keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Characters, autoCorrectEnabled = false),
                 colors = deltaTextFieldColors(), modifier = Modifier.fillMaxWidth(),
             )
             FormDivider()
             Box {
-                FormRow(title = "Format", value = format.displayName, chevron = true, onClick = { formatMenu = true })
+                FormRow(title = str(StrKey.CHEAT_FORMAT), value = format.localizedName(strings), chevron = true, onClick = { formatMenu = true })
                 DropdownMenu(expanded = formatMenu, onDismissRequest = { formatMenu = false }) {
                     formats.forEach { f ->
-                        DropdownMenuItem(text = { Text((if (f == format) "✓ " else "    ") + f.displayName) }, onClick = { format = f; formatMenu = false })
+                        DropdownMenuItem(text = { Text((if (f == format) "✓ " else "    ") + f.localizedName(strings)) }, onClick = { format = f; formatMenu = false })
                     }
                 }
             }
             FormDivider()
             FormRow(
-                title = "Add Cheat",
+                title = str(StrKey.CHEAT_ADD),
                 titleColor = if (code.isBlank()) DeltaColors.SystemGray else DeltaColors.Purple,
                 enabled = code.isNotBlank(),
                 onClick = {
-                    when (val r = CheatValidator.validate(code, rom.system, format)) {
+                    when (val r = CheatValidator.validate(code, rom.system, format, strings)) {
                         is CheatValidator.Result.Invalid -> error = r.reason
                         is CheatValidator.Result.Valid -> {
-                            val n = name.ifBlank { "Cheat ${cheats.size + 1}" }
+                            val n = name.ifBlank { strings.format(StrKey.CHEAT_DEFAULT_NAME, cheats.size + 1) }
                             update { l -> l += CheatCode(name = n, code = r.normalized, format = format, isEnabled = true) }
                             name = ""
                             code = ""
@@ -181,14 +185,15 @@ fun CheatCodesSheet(rom: RomEntry, session: EmulatorSession?, onDismiss: () -> U
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun HoldButtonsSheet(rom: RomEntry, held: Set<VirtualButton>, onToggle: (VirtualButton) -> Unit, onDone: () -> Unit) {
+    val strings = LocalDeltaStrings.current
     val buttons = listOf(
         VirtualButton.A, VirtualButton.B, VirtualButton.X, VirtualButton.Y, VirtualButton.L, VirtualButton.R,
         VirtualButton.UP, VirtualButton.DOWN, VirtualButton.LEFT, VirtualButton.RIGHT,
     )
     val labels = rom.system.gamepadLayout.faceLabels
-    DeltaSheet(title = "Hold Buttons", onDismiss = onDone, halfHeight = true) {
+    DeltaSheet(title = str(StrKey.PAUSE_HOLD_BUTTONS), onDismiss = onDone, halfHeight = true) {
         Text(
-            "Select the buttons to hold. They stay pressed until you tap Hold Buttons again.",
+            str(StrKey.HOLD_BUTTONS_HINT),
             style = DeltaType.Subheadline,
             color = DeltaColors.SystemGray,
             modifier = Modifier.padding(16.dp),
@@ -210,7 +215,13 @@ fun HoldButtonsSheet(rom: RomEntry, held: Set<VirtualButton>, onToggle: (Virtual
                         .clickable { onToggle(b) },
                     contentAlignment = Alignment.Center,
                 ) {
-                    val label = labels[b]?.takeIf { rom.system == GameSystem.GENESIS } ?: b.name
+                    val label = labels[b]?.takeIf { rom.system == GameSystem.GENESIS } ?: when (b) {
+                        VirtualButton.UP -> strings[StrKey.CTRL_BTN_UP]
+                        VirtualButton.DOWN -> strings[StrKey.CTRL_BTN_DOWN]
+                        VirtualButton.LEFT -> strings[StrKey.CTRL_BTN_LEFT]
+                        VirtualButton.RIGHT -> strings[StrKey.CTRL_BTN_RIGHT]
+                        else -> b.name
+                    }
                     Text(label, style = DeltaType.Headline, color = Color.White)
                 }
             }
@@ -231,6 +242,7 @@ fun MoreOptionsSheet(
 ) {
     val prefsStore = DeltaApplication.container.preferences
     val prefs by prefsStore.state.collectAsState()
+    val strings = LocalDeltaStrings.current
     var showCoreOptions by remember { mutableStateOf(false) }
     if (showCoreOptions) {
         CoreOptionsSheet(rom, session) { showCoreOptions = false }
@@ -238,7 +250,7 @@ fun MoreOptionsSheet(
     }
     DeltaSheet(title = rom.title, onDismiss = onDismiss) {
         FormSection {
-            FormRow(title = "Restart Game", titleColor = Color(0xFFFF453A), onClick = {
+            FormRow(title = str(StrKey.MORE_RESTART_GAME), titleColor = Color(0xFFFF453A), onClick = {
                 session?.reset()
                 onDismiss()
                 onResume()
@@ -246,22 +258,26 @@ fun MoreOptionsSheet(
             if (rom.system == GameSystem.NDS || prefs.isExperimentalEnabled("reverseScreens")) {
                 FormDivider()
                 FormToggleRow(
-                    title = "Reverse Controller Skin Screens (DS)",
+                    title = str(StrKey.MORE_REVERSE_DS_SCREENS),
                     checked = ui.reverseScreens,
                     onCheckedChange = { ui.reverseScreens = it },
                 )
             }
         }
-        FormSection(header = "Fast Forward") {
+        FormSection(header = str(StrKey.PAUSE_FAST_FORWARD)) {
             val mode = FastForwardMode.fromRaw(prefs.fastForwardMode)
-            FormSegmentedRow("Button Mode", FastForwardMode.entries.map { it.title }, FastForwardMode.entries.indexOf(mode)) { i ->
+            FormSegmentedRow(
+                str(StrKey.MORE_BUTTON_MODE),
+                FastForwardMode.entries.map { it.localizedTitle(strings) },
+                FastForwardMode.entries.indexOf(mode),
+            ) { i ->
                 val m = FastForwardMode.entries[i]
                 prefsStore.update { it.copy(fastForwardMode = m.raw) }
                 session?.configureFastForward(m, prefs.fastForwardMultiplier)
             }
             FormDivider()
             val speeds = FastForwardController.SUPPORTED_MULTIPLIERS
-            FormSegmentedRow("Speed", speeds.map { "$it×" }, speeds.indexOf(prefs.fastForwardMultiplier).coerceAtLeast(0)) { i ->
+            FormSegmentedRow(str(StrKey.MORE_SPEED), speeds.map { "$it×" }, speeds.indexOf(prefs.fastForwardMultiplier).coerceAtLeast(0)) { i ->
                 prefsStore.update { it.copy(fastForwardMultiplier = speeds[i]) }
                 session?.fastForward?.setMultiplier(speeds[i])
                 ui.fastForwardMultiplier = speeds[i]
@@ -271,8 +287,8 @@ fun MoreOptionsSheet(
         val family = rom.system.skinSystem
         if (family != null) {
             FormSection(
-                header = "Controller Skin (${SkinCatalog.familyShortName(family)})",
-                footer = "Only ${SkinCatalog.familyDisplayName(family)} skins are shown. Other systems keep their own skins.",
+                header = str(StrKey.MORE_CONTROLLER_SKIN_HEADER, SkinCatalog.familyShortName(family)),
+                footer = str(StrKey.MORE_CONTROLLER_SKIN_FOOTER, SkinCatalog.familyDisplayName(family)),
             ) {
                 val options = remember(family) { runCatching { SkinCatalog.options(family) }.getOrDefault(emptyList()) }
                 Row(
@@ -305,27 +321,30 @@ fun MoreOptionsSheet(
                     }
                 }
                 FormDivider()
-                FormRow(title = "Current: " + (options.firstOrNull { it.id == activeSkinId }?.name ?: options.firstOrNull()?.name ?: "Standard"), titleColor = DeltaColors.SystemGray)
+                val currentName = options.firstOrNull { it.id == activeSkinId }?.name
+                    ?: options.firstOrNull()?.name
+                    ?: str(StrKey.COMMON_STANDARD)
+                FormRow(title = str(StrKey.MORE_CURRENT_SKIN, currentName), titleColor = DeltaColors.SystemGray)
             }
         }
-        FormSection(header = "Display") {
+        FormSection(header = str(StrKey.MORE_DISPLAY)) {
             val filter = VideoFilter.fromRaw(prefs.filter)
             VideoFilter.entries.forEachIndexed { i, f ->
                 if (i > 0) FormDivider()
-                FormCheckRow(f.title, f == filter) { prefsStore.update { it.copy(filter = f.raw) } }
+                FormCheckRow(f.localizedTitle(strings), f == filter) { prefsStore.update { it.copy(filter = f.raw) } }
             }
             FormDivider()
-            FormToggleRow("Integer Scaling", prefs.integerScaling, { v -> prefsStore.update { it.copy(integerScaling = v) } })
+            FormToggleRow(str(StrKey.MORE_INTEGER_SCALING), prefs.integerScaling, { v -> prefsStore.update { it.copy(integerScaling = v) } })
         }
-        FormSection(header = "Core") {
-            FormRow(title = "Core Options", chevron = true, onClick = { showCoreOptions = true })
+        FormSection(header = str(StrKey.MORE_CORE)) {
+            FormRow(title = str(StrKey.MORE_CORE_OPTIONS), chevron = true, onClick = { showCoreOptions = true })
             FormDivider()
-            FormRow(title = "Core", value = listOf(session?.libraryName, session?.libraryVersion).filter { !it.isNullOrBlank() }.joinToString(" ").ifBlank { rom.system.coreDisplayName })
+            FormRow(title = str(StrKey.MORE_CORE), value = listOf(session?.libraryName, session?.libraryVersion).filter { !it.isNullOrBlank() }.joinToString(" ").ifBlank { rom.system.coreDisplayName })
         }
-        FormSection(header = "Events") {
-            DLC_EVENTS.forEachIndexed { i, (title, summary) ->
+        FormSection(header = str(StrKey.MORE_EVENTS)) {
+            DLC_EVENTS.forEachIndexed { i, (titleKey, summaryKey) ->
                 if (i > 0) FormDivider()
-                FormRow(title = title, subtitle = summary, trailing = {
+                FormRow(title = str(titleKey), subtitle = str(summaryKey), trailing = {
                     Icon(Icons.Filled.CheckCircle, null, tint = Color(0xFF30D158))
                 })
             }
@@ -337,31 +356,33 @@ fun MoreOptionsSheet(
 }
 
 private val DLC_EVENTS = listOf(
-    "Aurora Ticket (Birth Island)" to "Unlocks the ferry to Birth Island to encounter Deoxys.",
-    "Mystic Ticket (Navel Rock)" to "Unlocks the ferry to Navel Rock to encounter Lugia and Ho-Oh.",
-    "Old Sea Map (Faraway Island)" to "Unlocks travel to Faraway Island to encounter Mew.",
-    "Eon Ticket (Southern Island)" to "Unlocks Southern Island to catch Latios or Latias.",
+    StrKey.DLC_AURORA_TITLE to StrKey.DLC_AURORA_SUMMARY,
+    StrKey.DLC_MYSTIC_TITLE to StrKey.DLC_MYSTIC_SUMMARY,
+    StrKey.DLC_OLD_SEA_MAP_TITLE to StrKey.DLC_OLD_SEA_MAP_SUMMARY,
+    StrKey.DLC_EON_TITLE to StrKey.DLC_EON_SUMMARY,
 )
 
 @Composable
 private fun LuSection(rom: RomEntry) {
+    val strings = LocalDeltaStrings.current
     var question by remember { mutableStateOf("") }
-    var answer by remember { mutableStateOf("Tip: Use Hold Buttons in the Pause Menu to auto-hold B for running or A for rapid fire!") }
-    FormSection(header = "Ask Lu (Experimental AI Game Assistant)") {
+    var customAnswer by remember { mutableStateOf<String?>(null) }
+    val answer = customAnswer ?: str(StrKey.LU_DEFAULT_TIP)
+    FormSection(header = str(StrKey.LU_SECTION_HEADER)) {
         Text(answer, style = DeltaType.Caption, color = DeltaColors.SystemGray, modifier = Modifier.padding(16.dp))
         FormDivider()
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(end = 12.dp)) {
             TextField(
                 value = question, onValueChange = { question = it },
-                placeholder = { Text("Ask Lu about ${rom.title}…") },
+                placeholder = { Text(str(StrKey.LU_PLACEHOLDER, rom.title)) },
                 singleLine = true, colors = deltaTextFieldColors(), modifier = Modifier.weight(1f),
             )
             OutlinedButton(onClick = {
                 if (question.isNotBlank()) {
-                    answer = "Lu (${rom.system.shortName}): For '$question' in ${rom.title}, use Save States before boss rooms and toggle Fast Forward (2x–4x) to grind quickly!"
+                    customAnswer = strings.format(StrKey.LU_REPLY_TEMPLATE, rom.system.shortName, question, rom.title)
                     question = ""
                 }
-            }) { Text("Ask", color = DeltaColors.Purple) }
+            }) { Text(str(StrKey.LU_ASK), color = DeltaColors.Purple) }
         }
     }
 }
@@ -379,9 +400,9 @@ fun CoreOptionsSheet(rom: RomEntry, session: EmulatorSession?, onDismiss: () -> 
             .filter { runCatching { it["visible"]!!.jsonPrimitive.boolean }.getOrDefault(true) }
     }
     var expanded by remember { mutableStateOf<String?>(null) }
-    DeltaSheet(title = "Core Options", onDismiss = onDismiss) {
+    DeltaSheet(title = str(StrKey.MORE_CORE_OPTIONS), onDismiss = onDismiss) {
         FormSection {
-            if (options.isEmpty()) FormRow(title = "This core has no options.", titleColor = DeltaColors.SystemGray)
+            if (options.isEmpty()) FormRow(title = str(StrKey.MORE_NO_CORE_OPTIONS), titleColor = DeltaColors.SystemGray)
             options.forEachIndexed { i, o ->
                 if (i > 0) FormDivider()
                 val key = o["key"]!!.jsonPrimitive.content

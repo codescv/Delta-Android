@@ -67,6 +67,9 @@ import coil.compose.AsyncImage
 import coil.compose.AsyncImagePainter
 import coil.compose.rememberAsyncImagePainter
 import coil.request.ImageRequest
+import com.codescv.delta.i18n.LocalDeltaStrings
+import com.codescv.delta.i18n.StrKey
+import com.codescv.delta.i18n.str
 import com.codescv.delta.library.RomEntry
 import com.codescv.delta.model.GameSystem
 import com.codescv.delta.skins.SkinRepository
@@ -251,6 +254,7 @@ fun ContinueCard(rom: RomEntry, thumbnail: Thumbnail?, onClick: () -> Unit, onLo
 @Composable
 fun PageSwitcher(pages: List<LibraryPage>, current: LibraryPage?, onSelect: (LibraryPage) -> Unit) {
     val icons = rememberControllerIcons(pages)
+    val strings = LocalDeltaStrings.current
     Row(
         Modifier
             .shadow(8.dp, CircleShape, ambientColor = Color.Black.copy(alpha = 0.35f), spotColor = Color.Black.copy(alpha = 0.35f))
@@ -270,7 +274,7 @@ fun PageSwitcher(pages: List<LibraryPage>, current: LibraryPage?, onSelect: (Lib
                         interactionSource = remember { MutableInteractionSource() },
                         indication = null,
                     ) { onSelect(page) }
-                    .semantics { contentDescription = page.title },
+                    .semantics { contentDescription = page.localizedTitle(strings) },
                 contentAlignment = Alignment.Center,
             ) {
                 when (page) {
@@ -344,7 +348,7 @@ fun LibrarySearchBar(
     ) {
         Icon(Icons.Filled.Search, contentDescription = null, tint = DeltaColors.CardTitle, modifier = Modifier.size(22.dp))
         Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
-            if (text.isEmpty()) Text("Search", color = DeltaColors.InactiveIcon, fontSize = 19.sp, maxLines = 1)
+            if (text.isEmpty()) Text(str(StrKey.LIB_SEARCH), color = DeltaColors.InactiveIcon, fontSize = 19.sp, maxLines = 1)
             BasicTextField(
                 value = text,
                 onValueChange = onTextChange,
@@ -361,6 +365,7 @@ fun LibrarySearchBar(
             )
         }
         if (text.isNotEmpty()) {
+            val clearSearchDesc = str(StrKey.LIB_CLEAR_SEARCH)
             Box(
                 Modifier
                     .size(28.dp)
@@ -369,7 +374,7 @@ fun LibrarySearchBar(
                         indication = null,
                         onClick = onClear,
                     )
-                    .semantics { contentDescription = "Clear Search" },
+                    .semantics { contentDescription = clearSearchDesc },
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(Icons.Filled.Cancel, contentDescription = null, tint = DeltaColors.InactiveIcon, modifier = Modifier.size(20.dp))

@@ -34,6 +34,7 @@ import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.SportsEsports
 import androidx.compose.material.icons.outlined.Sync
 import androidx.compose.material.icons.outlined.TouchApp
+import androidx.compose.material.icons.outlined.Translate
 import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material3.Snackbar
 import androidx.compose.material3.SnackbarHost
@@ -58,8 +59,15 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.codescv.delta.DeltaApplication
 import com.codescv.delta.R
+import com.codescv.delta.i18n.AppLanguage
+import com.codescv.delta.i18n.DeltaI18n
+import com.codescv.delta.i18n.DeltaStrings
+import com.codescv.delta.i18n.LocalDeltaStrings
+import com.codescv.delta.i18n.StrKey
+import com.codescv.delta.i18n.str
 import com.codescv.delta.settings.AppPreferences
 import com.codescv.delta.settings.PreferencesStore
+import com.codescv.delta.ui.components.FormCheckRow
 import com.codescv.delta.ui.components.FormDivider
 import com.codescv.delta.ui.components.FormRow
 import com.codescv.delta.ui.components.FormSection
@@ -70,41 +78,86 @@ import com.codescv.delta.update.CheckForUpdatesRow
 import kotlinx.coroutines.launch
 
 /** Settings destinations (in-sheet navigation stack, like Delta's NavigationStack). */
-sealed class SettingsRoute(val title: String) {
+sealed class SettingsRoute {
     open val key: String get() = this::class.java.simpleName
 
-    data object Controllers : SettingsRoute("Controllers")
-    data class PlayerMapping(val player: Int) : SettingsRoute("Player $player") {
+    abstract fun localizedTitle(strings: DeltaStrings): String
+
+    data object Controllers : SettingsRoute() {
+        override fun localizedTitle(strings: DeltaStrings) = strings[StrKey.SETTINGS_CONTROLLERS]
+    }
+    data class PlayerMapping(val player: Int) : SettingsRoute() {
         override val key get() = "PlayerMapping$player"
+        override fun localizedTitle(strings: DeltaStrings) = strings.format(StrKey.SETTINGS_PLAYER_TITLE, player)
     }
-    data object Skins : SettingsRoute("Skins")
-    data class SkinDetail(val family: String, val displayName: String) : SettingsRoute(displayName) {
+    data object Skins : SettingsRoute() {
+        override fun localizedTitle(strings: DeltaStrings) = strings[StrKey.SETTINGS_SKINS]
+    }
+    data class SkinDetail(val family: String, val displayName: String) : SettingsRoute() {
         override val key get() = "SkinDetail-$family"
+        override fun localizedTitle(strings: DeltaStrings) = displayName
     }
-    data object TouchHaptics : SettingsRoute("Touch & Haptics")
-    data object Audio : SettingsRoute("Audio")
-    data object Video : SettingsRoute("Video")
-    data object Cores : SettingsRoute("Cores")
-    data object MelonDsBios : SettingsRoute("melonDS BIOS Settings")
-    data class CoreOptions(val coreId: String, val coreName: String) : SettingsRoute(coreName) {
+    data object TouchHaptics : SettingsRoute() {
+        override fun localizedTitle(strings: DeltaStrings) = strings[StrKey.SETTINGS_TOUCH_HAPTICS]
+    }
+    data object Audio : SettingsRoute() {
+        override fun localizedTitle(strings: DeltaStrings) = strings[StrKey.SETTINGS_AUDIO]
+    }
+    data object Video : SettingsRoute() {
+        override fun localizedTitle(strings: DeltaStrings) = strings[StrKey.SETTINGS_VIDEO]
+    }
+    data object Cores : SettingsRoute() {
+        override fun localizedTitle(strings: DeltaStrings) = strings[StrKey.SETTINGS_CORES]
+    }
+    data object MelonDsBios : SettingsRoute() {
+        override fun localizedTitle(strings: DeltaStrings) = strings[StrKey.SETTINGS_MELONDS_BIOS]
+    }
+    data class CoreOptions(val coreId: String, val coreName: String) : SettingsRoute() {
         override val key get() = "CoreOptions-$coreId"
+        override fun localizedTitle(strings: DeltaStrings) = coreName
     }
-    data class CoreOptionValues(val coreId: String, val optionKey: String, val optionTitle: String) : SettingsRoute(optionTitle) {
+    data class CoreOptionValues(val coreId: String, val optionKey: String, val optionTitle: String) : SettingsRoute() {
         override val key get() = "CoreOptionValues-$coreId-$optionKey"
+        override fun localizedTitle(strings: DeltaStrings) = optionTitle
     }
-    data object OnlineMultiplayer : SettingsRoute("Online Multiplayer")
-    data object AppIcon : SettingsRoute("Change App Icon")
-    data object DeltaSync : SettingsRoute("Delta Sync")
-    data object RetroAchievements : SettingsRoute("RetroAchievements")
-    data object LilSettings : SettingsRoute("Lil’ Settings")
-    data object Advanced : SettingsRoute("Advanced")
-    data object GameLibrary : SettingsRoute("Game Library")
-    data object Experimental : SettingsRoute("Experimental Features")
-    data class ExperimentalDetail(val featureKey: String, val name: String) : SettingsRoute(name) {
+    data object OnlineMultiplayer : SettingsRoute() {
+        override fun localizedTitle(strings: DeltaStrings) = strings[StrKey.SETTINGS_ONLINE_MULTIPLAYER]
+    }
+    data object AppIcon : SettingsRoute() {
+        override fun localizedTitle(strings: DeltaStrings) = strings[StrKey.SETTINGS_CHANGE_APP_ICON]
+    }
+    data object Language : SettingsRoute() {
+        override fun localizedTitle(strings: DeltaStrings) = strings[StrKey.SETTINGS_LANGUAGE]
+    }
+    data object DeltaSync : SettingsRoute() {
+        override fun localizedTitle(strings: DeltaStrings) = strings[StrKey.SETTINGS_DELTA_SYNC]
+    }
+    data object RetroAchievements : SettingsRoute() {
+        override fun localizedTitle(strings: DeltaStrings) = strings[StrKey.SETTINGS_RETROACHIEVEMENTS]
+    }
+    data object LilSettings : SettingsRoute() {
+        override fun localizedTitle(strings: DeltaStrings) = strings[StrKey.SETTINGS_LIL_SETTINGS]
+    }
+    data object Advanced : SettingsRoute() {
+        override fun localizedTitle(strings: DeltaStrings) = strings[StrKey.SETTINGS_ADVANCED]
+    }
+    data object GameLibrary : SettingsRoute() {
+        override fun localizedTitle(strings: DeltaStrings) = strings[StrKey.SETTINGS_GAME_LIBRARY]
+    }
+    data object Experimental : SettingsRoute() {
+        override fun localizedTitle(strings: DeltaStrings) = strings[StrKey.SETTINGS_EXPERIMENTAL_FEATURES]
+    }
+    data class ExperimentalDetail(val featureKey: String, val fallbackName: String = featureKey) : SettingsRoute() {
         override val key get() = "ExperimentalDetail-$featureKey"
+        override fun localizedTitle(strings: DeltaStrings) =
+            SettingsData.experimentalTitle(featureKey, fallbackName, strings)
     }
-    data object Contributors : SettingsRoute("Contributors")
-    data object Licenses : SettingsRoute("Software Licenses")
+    data object Contributors : SettingsRoute() {
+        override fun localizedTitle(strings: DeltaStrings) = strings[StrKey.SETTINGS_CONTRIBUTORS]
+    }
+    data object Licenses : SettingsRoute() {
+        override fun localizedTitle(strings: DeltaStrings) = strings[StrKey.SETTINGS_SOFTWARE_LICENSES]
+    }
 }
 
 /** What every Settings page needs: preferences, navigation and a snackbar. */
@@ -125,6 +178,7 @@ class SettingsNav internal constructor(
 fun SettingsScreen(onClose: () -> Unit) {
     val store = DeltaApplication.container.preferences
     val prefs by store.state.collectAsState()
+    val strings = LocalDeltaStrings.current
     val stack = remember { mutableStateListOf<SettingsRoute>() }
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
@@ -171,8 +225,9 @@ fun SettingsScreen(onClose: () -> Unit) {
                         SettingsRoot(prefs, nav, onClose)
                     } else {
                         Column(Modifier.fillMaxSize()) {
-                            val backTitle = routes.getOrNull(routes.size - 2)?.title ?: "Settings"
-                            SettingsNavBar(route.title, backTitle, onBack = { nav.pop() })
+                            val backTitle = routes.getOrNull(routes.size - 2)?.localizedTitle(strings)
+                                ?: strings[StrKey.SETTINGS_TITLE]
+                            SettingsNavBar(route.localizedTitle(strings), backTitle, onBack = { nav.pop() })
                             SettingsDestination(route, prefs, nav)
                         }
                     }
@@ -209,6 +264,7 @@ private fun SettingsDestination(route: SettingsRoute, prefs: AppPreferences, nav
         is SettingsRoute.CoreOptionValues -> CoreOptionValuesSettings(route.coreId, route.optionKey, prefs, nav)
         SettingsRoute.OnlineMultiplayer -> OnlineMultiplayerSettings(prefs, nav)
         SettingsRoute.AppIcon -> AppIconSettings(prefs, nav)
+        SettingsRoute.Language -> LanguageSettings(prefs, nav)
         SettingsRoute.DeltaSync -> DeltaSyncSettings(prefs, nav)
         SettingsRoute.RetroAchievements -> RetroAchievementsSettings(prefs, nav)
         SettingsRoute.LilSettings -> LilSettings(prefs, nav)
@@ -221,17 +277,19 @@ private fun SettingsDestination(route: SettingsRoute, prefs: AppPreferences, nav
     }
 }
 
-/** Root list: Android **Support** (更新与反馈) section first, then Delta 2.0.5 `SettingsView` sections. */
+/** Root list: Android Support section first, then Delta 2.0.5 `SettingsView` sections. */
 @Composable
 private fun SettingsRoot(prefs: AppPreferences, nav: SettingsNav, onClose: () -> Unit) {
     val scroll = rememberScrollState()
     val collapsed by remember { derivedStateOf { scroll.value > 120 } }
     val syncState by DeltaApplication.container.sync.uiState.collectAsState()
+    val strings = LocalDeltaStrings.current
+    val currentLanguage = AppLanguage.fromRaw(prefs.language)
     Column(Modifier.fillMaxSize()) {
         Box(Modifier.fillMaxWidth().height(56.dp).padding(horizontal = 16.dp)) {
             Box(Modifier.align(Alignment.CenterStart)) { SettingsCloseButton(onClose) }
             Text(
-                "Settings",
+                str(StrKey.SETTINGS_TITLE),
                 style = DeltaType.Headline,
                 color = Color.White,
                 modifier = Modifier.align(Alignment.Center).alpha(if (collapsed) 1f else 0f),
@@ -245,65 +303,72 @@ private fun SettingsRoot(prefs: AppPreferences, nav: SettingsNav, onClose: () ->
                 .padding(bottom = 32.dp),
         ) {
             Text(
-                "Settings",
+                str(StrKey.SETTINGS_TITLE),
                 style = DeltaType.LargeTitle,
                 color = Color.White,
                 modifier = Modifier.padding(start = 20.dp, top = 4.dp, bottom = 4.dp),
             )
 
-            // 更新与反馈 / Support first, so Check for Updates + Send Feedback are visible without scrolling.
+            // Support section first, so Check for Updates + Send Feedback are visible without scrolling.
             FormSection(header = stringResource(R.string.support_section_header)) {
                 CheckForUpdatesRow()
                 FormDivider(inset = true)
                 AgentFeedbackRow()
             }
-            FormSection(header = "Controls") {
-                NavRow("Controllers", Icons.Outlined.SportsEsports, DeltaColors.BadgePurple) { nav.push(SettingsRoute.Controllers) }
+            FormSection(header = str(StrKey.SETTINGS_SECTION_CONTROLS)) {
+                NavRow(str(StrKey.SETTINGS_CONTROLLERS), Icons.Outlined.SportsEsports, DeltaColors.BadgePurple) { nav.push(SettingsRoute.Controllers) }
                 FormDivider(inset = true)
-                NavRow("Skins", Icons.Outlined.Palette, DeltaColors.BadgePink) { nav.push(SettingsRoute.Skins) }
+                NavRow(str(StrKey.SETTINGS_SKINS), Icons.Outlined.Palette, DeltaColors.BadgePink) { nav.push(SettingsRoute.Skins) }
                 FormDivider(inset = true)
-                NavRow("Touch & Haptics", Icons.Outlined.TouchApp, DeltaColors.BadgeRed) { nav.push(SettingsRoute.TouchHaptics) }
+                NavRow(str(StrKey.SETTINGS_TOUCH_HAPTICS), Icons.Outlined.TouchApp, DeltaColors.BadgeRed) { nav.push(SettingsRoute.TouchHaptics) }
             }
-            FormSection(header = "Emulation") {
-                NavRow("Audio", Icons.AutoMirrored.Outlined.VolumeUp, DeltaColors.BadgeGreen) { nav.push(SettingsRoute.Audio) }
+            FormSection(header = str(StrKey.SETTINGS_SECTION_EMULATION)) {
+                NavRow(str(StrKey.SETTINGS_AUDIO), Icons.AutoMirrored.Outlined.VolumeUp, DeltaColors.BadgeGreen) { nav.push(SettingsRoute.Audio) }
                 FormDivider(inset = true)
-                NavRow("Video", Icons.Outlined.Monitor, DeltaColors.BadgeTeal) { nav.push(SettingsRoute.Video) }
+                NavRow(str(StrKey.SETTINGS_VIDEO), Icons.Outlined.Monitor, DeltaColors.BadgeTeal) { nav.push(SettingsRoute.Video) }
                 FormDivider(inset = true)
-                NavRow("Cores", Icons.Outlined.Memory, DeltaColors.BadgeCyan) { nav.push(SettingsRoute.Cores) }
+                NavRow(str(StrKey.SETTINGS_CORES), Icons.Outlined.Memory, DeltaColors.BadgeCyan) { nav.push(SettingsRoute.Cores) }
             }
             FormSection {
-                NavRow("Online Multiplayer", Icons.Outlined.Language, DeltaColors.BadgeOrange) { nav.push(SettingsRoute.OnlineMultiplayer) }
+                NavRow(str(StrKey.SETTINGS_ONLINE_MULTIPLAYER), Icons.Outlined.Language, DeltaColors.BadgeOrange) { nav.push(SettingsRoute.OnlineMultiplayer) }
             }
-            FormSection(header = "Display") {
-                NavRow("App Icon", Icons.Outlined.GridView, DeltaColors.BadgeBlue) { nav.push(SettingsRoute.AppIcon) }
+            FormSection(header = str(StrKey.SETTINGS_SECTION_DISPLAY)) {
+                NavRow(str(StrKey.SETTINGS_APP_ICON), Icons.Outlined.GridView, DeltaColors.BadgeBlue) { nav.push(SettingsRoute.AppIcon) }
+                FormDivider(inset = true)
+                NavRow(
+                    str(StrKey.SETTINGS_LANGUAGE),
+                    Icons.Outlined.Translate,
+                    DeltaColors.BadgeTeal,
+                    value = currentLanguage.displayName(strings),
+                ) { nav.push(SettingsRoute.Language) }
             }
             FormSection {
                 NavRow(
-                    "Delta Sync", Icons.Outlined.Sync, DeltaColors.BadgeIndigo,
+                    str(StrKey.SETTINGS_DELTA_SYNC), Icons.Outlined.Sync, DeltaColors.BadgeIndigo,
                     value = when {
                         syncState.pendingConflicts.isNotEmpty() ->
-                            "${syncState.pendingConflicts.size} conflict(s)"
+                            strings.format(StrKey.SETTINGS_CONFLICTS_BADGE, syncState.pendingConflicts.size)
                         syncState.isSignedIn -> syncState.accountEmail.ifBlank { "Google Drive" }
                         else -> null
                     },
                 ) { nav.push(SettingsRoute.DeltaSync) }
                 FormDivider(inset = true)
                 NavRow(
-                    "RetroAchievements", Icons.Outlined.MilitaryTech, DeltaColors.BadgeIndigo,
+                    str(StrKey.SETTINGS_RETROACHIEVEMENTS), Icons.Outlined.MilitaryTech, DeltaColors.BadgeIndigo,
                     value = prefs.retroAchievementsUsername.ifEmpty { null },
                 ) { nav.push(SettingsRoute.RetroAchievements) }
             }
             FormSection {
-                NavRow("Lil’ Settings", Icons.Outlined.Tune, DeltaColors.BadgeGray) { nav.push(SettingsRoute.LilSettings) }
+                NavRow(str(StrKey.SETTINGS_LIL_SETTINGS), Icons.Outlined.Tune, DeltaColors.BadgeGray) { nav.push(SettingsRoute.LilSettings) }
                 FormDivider(inset = true)
-                NavRow("Advanced", Icons.Outlined.Settings, DeltaColors.BadgeGray) { nav.push(SettingsRoute.Advanced) }
+                NavRow(str(StrKey.SETTINGS_ADVANCED), Icons.Outlined.Settings, DeltaColors.BadgeGray) { nav.push(SettingsRoute.Advanced) }
                 FormDivider(inset = true)
-                NavRow("Experimental", Icons.Outlined.Science, DeltaColors.BadgeGray) { nav.push(SettingsRoute.Experimental) }
+                NavRow(str(StrKey.SETTINGS_EXPERIMENTAL), Icons.Outlined.Science, DeltaColors.BadgeGray) { nav.push(SettingsRoute.Experimental) }
             }
-            FormSection(header = "Credits") {
-                FormRow(title = "Contributors", chevron = true, onClick = { nav.push(SettingsRoute.Contributors) })
+            FormSection(header = str(StrKey.SETTINGS_SECTION_CREDITS)) {
+                FormRow(title = str(StrKey.SETTINGS_CONTRIBUTORS), chevron = true, onClick = { nav.push(SettingsRoute.Contributors) })
                 FormDivider()
-                FormRow(title = "Software Licenses", chevron = true, onClick = { nav.push(SettingsRoute.Licenses) })
+                FormRow(title = str(StrKey.SETTINGS_SOFTWARE_LICENSES), chevron = true, onClick = { nav.push(SettingsRoute.Licenses) })
             }
             Spacer(Modifier.height(12.dp))
             Text(
@@ -313,6 +378,34 @@ private fun SettingsRoot(prefs: AppPreferences, nav: SettingsNav, onClose: () ->
                 textAlign = TextAlign.Center,
                 modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
             )
+        }
+    }
+}
+
+@Composable
+internal fun LanguageSettings(prefs: AppPreferences, nav: SettingsNav) {
+    val strings = LocalDeltaStrings.current
+    val selected = AppLanguage.fromRaw(prefs.language)
+    val systemResolved = remember { AppLanguage.SYSTEM.resolve(DeltaI18n.deviceSystemLocale()) }
+
+    SettingsPage {
+        FormSection(footer = str(StrKey.LANGUAGE_FOOTER)) {
+            AppLanguage.entries.forEachIndexed { index, option ->
+                if (index > 0) FormDivider()
+                val subtitle = if (option == AppLanguage.SYSTEM) {
+                    strings.format(StrKey.LANGUAGE_SYSTEM_SUBTITLE, systemResolved.nativeName)
+                } else {
+                    null
+                }
+                FormCheckRow(
+                    title = option.displayName(strings),
+                    subtitle = subtitle,
+                    selected = option == selected,
+                ) {
+                    DeltaI18n.applyPreference(option)
+                    nav.update { it.copy(language = option.raw) }
+                }
+            }
         }
     }
 }

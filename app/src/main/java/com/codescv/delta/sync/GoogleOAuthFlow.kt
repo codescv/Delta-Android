@@ -1,5 +1,7 @@
 package com.codescv.delta.sync
 
+import com.codescv.delta.i18n.DeltaI18n
+import com.codescv.delta.i18n.StrKey
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
@@ -33,7 +35,7 @@ data class OAuthTokens(
 )
 
 class CancellationIOException(
-    message: String = "Google sign-in was cancelled",
+    message: String = DeltaI18n.tr(StrKey.OAUTH_ERR_CANCELLED),
     cause: Throwable? = null,
 ) : IOException(message, cause)
 
@@ -61,7 +63,7 @@ class OAuthRedirectCoordinator {
     ) {
         suspend fun awaitUri(): String = deferred.await()
 
-        fun cancel(reason: String = "Google sign-in was cancelled") {
+        fun cancel(reason: String = DeltaI18n.tr(StrKey.OAUTH_ERR_CANCELLED)) {
             cancelSessionIfActive(id, reason)
         }
 
@@ -79,7 +81,7 @@ class OAuthRedirectCoordinator {
         val deferred = CompletableDeferred<String>()
         synchronized(lock) {
             activeSession?.deferred?.completeExceptionally(
-                CancellationIOException("Superseded by a new Google sign-in"),
+                CancellationIOException(DeltaI18n.tr(StrKey.OAUTH_ERR_SUPERSEDED)),
             )
             activeSession = Session(id = id, deferred = deferred)
         }
@@ -96,7 +98,7 @@ class OAuthRedirectCoordinator {
         return target.deferred.complete(rawUri)
     }
 
-    fun cancelActive(reason: String = "Google sign-in was cancelled"): Boolean {
+    fun cancelActive(reason: String = DeltaI18n.tr(StrKey.OAUTH_ERR_CANCELLED)): Boolean {
         val target = synchronized(lock) {
             val current = activeSession ?: return false
             activeSession = null
@@ -105,7 +107,7 @@ class OAuthRedirectCoordinator {
         return target.deferred.completeExceptionally(CancellationIOException(reason))
     }
 
-    fun cancelSessionIfActive(sessionId: Long, reason: String = "Google sign-in was cancelled"): Boolean {
+    fun cancelSessionIfActive(sessionId: Long, reason: String = DeltaI18n.tr(StrKey.OAUTH_ERR_CANCELLED)): Boolean {
         val target = synchronized(lock) {
             val current = activeSession ?: return false
             if (current.id != sessionId) return false
@@ -180,12 +182,12 @@ class GoogleOAuthFlow(
             val trimmed = clientId.trim()
             if (!trimmed.endsWith(GOOGLE_CLIENT_ID_SUFFIX, ignoreCase = true)) {
                 throw IllegalArgumentException(
-                    "OAuth Client ID must end with $GOOGLE_CLIENT_ID_SUFFIX",
+                    DeltaI18n.tr(StrKey.OAUTH_ERR_CLIENT_ID_SUFFIX, GOOGLE_CLIENT_ID_SUFFIX),
                 )
             }
             val prefix = trimmed.dropLast(GOOGLE_CLIENT_ID_SUFFIX.length)
             if (prefix.isEmpty() || !VALID_CLIENT_PREFIX_REGEX.matches(prefix)) {
-                throw IllegalArgumentException("OAuth Client ID has an invalid prefix")
+                throw IllegalArgumentException(DeltaI18n.tr(StrKey.OAUTH_ERR_CLIENT_ID_PREFIX))
             }
             return "$REDIRECT_SCHEME_PREFIX${prefix.lowercase(Locale.US)}"
         }
@@ -251,16 +253,16 @@ class GoogleOAuthFlow(
             val uri = try {
                 URI(rawUri.trim())
             } catch (e: Exception) {
-                throw GDriveAuthException("Invalid OAuth redirect URI", needsInteraction = true, cause = e)
+                throw GDriveAuthException(DeltaI18n.tr(StrKey.OAUTH_ERR_INVALID_REDIRECT), needsInteraction = true, cause = e)
             }
 
             val scheme = uri.scheme?.lowercase(Locale.US)
             if (scheme != expectedScheme.lowercase(Locale.US)) {
-                throw GDriveAuthException("Unexpected OAuth redirect scheme", needsInteraction = true)
+                throw GDriveAuthException(DeltaI18n.tr(StrKey.OAUTH_ERR_UNEXPECTED_SCHEME), needsInteraction = true)
             }
 
             if (uri.isOpaque || !uri.rawAuthority.isNullOrEmpty() || uri.rawPath != REDIRECT_PATH) {
-                throw GDriveAuthException("Unexpected OAuth redirect path", needsInteraction = true)
+                throw GDriveAuthException(DeltaI18n.tr(StrKey.OAUTH_ERR_UNEXPECTED_PATH), needsInteraction = true)
             }
 
             val params = parseQueryParams(uri.rawQuery.orEmpty())
@@ -271,7 +273,7 @@ class GoogleOAuthFlow(
             )
             if (!stateMatches) {
                 throw GDriveAuthException(
-                    "Invalid OAuth state — please try signing in again",
+                    DeltaI18n.tr(StrKey.OAUTH_ERR_INVALID_STATE),
                     needsInteraction = true,
                 )
             }
@@ -280,25 +282,25 @@ class GoogleOAuthFlow(
             if (error.isNotEmpty()) {
                 val desc = params["error_description"]?.trim().orEmpty()
                 val msg = when {
-                    error == "access_denied" && desc.isEmpty() -> "Google sign-in was denied"
-                    desc.isNotEmpty() -> "Google sign-in failed (${redactSecrets("$error: $desc")})"
-                    else -> "Google sign-in failed (${redactSecrets(error)})"
+                    error == "access_denied" && desc.isEmpty() -> DeltaI18n.tr(StrKey.OAUTH_ERR_DENIED)
+                    desc.isNotEmpty() -> DeltaI18n.tr(StrKey.OAUTH_ERR_FAILED_DETAIL, redactSecrets("$error: $desc"))
+                    else -> DeltaI18n.tr(StrKey.OAUTH_ERR_FAILED_DETAIL, redactSecrets(error))
                 }
                 throw GDriveAuthException(msg, needsInteraction = true)
             }
 
             return params["code"]?.trim()?.takeIf { it.isNotEmpty() }
                 ?: throw GDriveAuthException(
-                    "OAuth redirect did not include an authorization code",
+                    DeltaI18n.tr(StrKey.OAUTH_ERR_NO_AUTH_CODE),
                     needsInteraction = true,
                 )
         }
 
         internal fun parseTokenResponse(rawJson: String, nowMs: Long): OAuthTokens {
             val obj = runCatching { syncJson.parseToJsonElement(rawJson).jsonObject }.getOrNull()
-                ?: throw IOException("OAuth token response is not valid JSON")
+                ?: throw IOException(DeltaI18n.tr(StrKey.OAUTH_ERR_INVALID_JSON))
             val accessToken = obj.str("access_token")?.takeIf { it.isNotBlank() }
-                ?: throw IOException("OAuth token response missing access_token")
+                ?: throw IOException(DeltaI18n.tr(StrKey.OAUTH_ERR_RESPONSE_NO_TOKEN))
             val refreshToken = obj.str("refresh_token") ?: ""
             val expiresIn = (obj.long("expires_in", 3600L)).coerceAtLeast(60L)
             val expiresAtMs = nowMs + expiresIn * 1000L
@@ -326,7 +328,7 @@ class GoogleOAuthFlow(
 
     suspend fun authenticate(timeoutMs: Long = 5 * 60_000L): OAuthTokens {
         val trimmedClientId = clientId.trim()
-        require(trimmedClientId.isNotEmpty()) { "OAuth Client ID is required" }
+        require(trimmedClientId.isNotEmpty()) { DeltaI18n.tr(StrKey.OAUTH_ERR_CLIENT_ID_REQUIRED) }
         val redirectScheme = deriveRedirectScheme(trimmedClientId)
         val redirectUri = "$redirectScheme:$REDIRECT_PATH"
 
@@ -355,7 +357,7 @@ class GoogleOAuthFlow(
                     session.awaitUri()
                 }
             } catch (e: TimeoutCancellationException) {
-                throw SocketTimeoutException("Timed out waiting for Google sign-in in browser")
+                throw SocketTimeoutException(DeltaI18n.tr(StrKey.OAUTH_ERR_TIMEOUT))
             }
 
             parseAndVerifyCallback(
@@ -380,7 +382,7 @@ class GoogleOAuthFlow(
         }
     }
 
-    fun cancel(reason: String = "Google sign-in was cancelled") {
+    fun cancel(reason: String = DeltaI18n.tr(StrKey.OAUTH_ERR_CANCELLED)) {
         cancelled.set(true)
         activeSession?.cancel(reason)
         runCatching { activeConnection?.disconnect() }
@@ -445,7 +447,7 @@ class GoogleOAuthFlow(
                 val detail = listOf(errCode, errDesc).filter { it.isNotBlank() }.joinToString(": ")
                     .ifBlank { "HTTP $status" }
                 throw GDriveAuthException(
-                    message = "OAuth token exchange failed (${redactSecrets(detail)})",
+                    message = DeltaI18n.tr(StrKey.OAUTH_ERR_TOKEN_EXCHANGE, redactSecrets(detail)),
                     needsInteraction = true,
                 )
             }

@@ -9,6 +9,8 @@ import android.graphics.pdf.PdfRenderer
 import android.os.ParcelFileDescriptor
 import android.util.Log
 import android.util.LruCache
+import com.codescv.delta.i18n.DeltaI18n
+import com.codescv.delta.i18n.StrKey
 import com.codescv.delta.library.ZipRomExtractor
 import com.codescv.delta.model.GameSystem
 import java.io.File
@@ -98,10 +100,10 @@ class SkinRepository(private val context: Context, private val skinsRoot: File) 
                 }
             }
             val info = File(staging, "info.json")
-            if (!info.isFile) throw IllegalArgumentException("Not a .deltaskin file (info.json missing).")
+            if (!info.isFile) throw IllegalArgumentException(DeltaI18n.tr(StrKey.SKINS_ERR_NOT_DELTASKIN))
             val probe = DeltaSkin.parse(fallbackFamily ?: "gba", info.readText())
             val family = DeltaSkin.skinSystemForGameType(probe.gameTypeIdentifier) ?: fallbackFamily
-                ?: throw IllegalArgumentException("Unknown game system for skin ${probe.name}.")
+                ?: throw IllegalArgumentException(DeltaI18n.tr(StrKey.SKINS_ERR_UNKNOWN_SYSTEM, probe.name))
             val dirName = (probe.identifier.ifBlank { displayName }).replace(Regex("[^A-Za-z0-9._-]"), "_")
             val dest = File(File(skinsRoot, family), dirName)
             dest.deleteRecursively()

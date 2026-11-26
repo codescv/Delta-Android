@@ -1,6 +1,10 @@
 package com.codescv.delta.settings
 
 import com.codescv.delta.cheats.CheatCode
+import com.codescv.delta.i18n.AppLanguage
+import com.codescv.delta.i18n.DeltaI18n
+import com.codescv.delta.i18n.DeltaStrings
+import com.codescv.delta.i18n.StrKey
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -15,6 +19,13 @@ enum class VideoFilter(val raw: String, val title: String) {
     LCD_GRID("lcdGrid", "LCD Grid"),
     CRT_SCANLINES("crtScanlines", "CRT Scanlines"),
     SMOOTH_BILINEAR("smoothBilinear", "Smooth Bilinear");
+
+    fun localizedTitle(strings: DeltaStrings = DeltaI18n.currentStrings()): String = when (this) {
+        SHARP_PIXELS -> strings[StrKey.VIDEO_FILTER_SHARP_PIXELS]
+        LCD_GRID -> strings[StrKey.VIDEO_FILTER_LCD_GRID]
+        CRT_SCANLINES -> strings[StrKey.VIDEO_FILTER_CRT_SCANLINES]
+        SMOOTH_BILINEAR -> strings[StrKey.VIDEO_FILTER_SMOOTH_BILINEAR]
+    }
 
     companion object {
         fun fromRaw(raw: String?) = entries.firstOrNull { it.raw == raw } ?: SHARP_PIXELS
@@ -74,6 +85,8 @@ data class AppPreferences(
     val syncBatterySaves: Boolean = true,
     val syncSaveStates: Boolean = true,
     val syncConflictPolicy: String = "ask",
+    // UI language: `system` | `zh` | `en` | `ja`.
+    val language: String = AppLanguage.SYSTEM.raw,
 ) {
     fun isExperimentalEnabled(key: String) = experimentalFeatures.firstOrNull { it.key == key }?.isEnabled ?: false
     fun experimentalOption(key: String, option: String) = experimentalFeatures.firstOrNull { it.key == key }?.options?.get(option)

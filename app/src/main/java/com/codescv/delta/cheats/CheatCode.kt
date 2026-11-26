@@ -1,5 +1,8 @@
 package com.codescv.delta.cheats
 
+import com.codescv.delta.i18n.DeltaI18n
+import com.codescv.delta.i18n.DeltaStrings
+import com.codescv.delta.i18n.StrKey
 import com.codescv.delta.model.GameSystem
 import kotlinx.serialization.Serializable
 import java.util.UUID
@@ -12,6 +15,11 @@ enum class CheatFormat(val displayName: String) {
     GAME_SHARK("GameShark"),
     CODE_BREAKER("CodeBreaker"),
     RAW("Raw");
+
+    fun localizedName(strings: DeltaStrings = DeltaI18n.currentStrings()): String = when (this) {
+        RAW -> strings[StrKey.CHEAT_FORMAT_RAW]
+        else -> displayName
+    }
 
     companion object {
         /** Formats Delta offers per system, in picker order. */
@@ -82,15 +90,19 @@ object CheatValidator {
     }
 
     /** Human-readable placeholder like Delta's code field hint. */
-    fun placeholder(system: GameSystem, format: CheatFormat): String = when (system.category) {
-        GameSystem.NES -> "XXXXXX or XXXXXXXX"
+    fun placeholder(
+        system: GameSystem,
+        format: CheatFormat,
+        strings: DeltaStrings = DeltaI18n.currentStrings(),
+    ): String = when (system.category) {
+        GameSystem.NES -> "XXXXXX / XXXXXXXX"
         GameSystem.SNES -> if (format == CheatFormat.GAME_GENIE) "XXXX-XXXX" else "XXXXXXXX"
         GameSystem.GB -> if (format == CheatFormat.GAME_GENIE) "XXX-XXX-XXX" else "XXXXXXXX"
         GameSystem.GBA -> if (format == CheatFormat.CODE_BREAKER) "XXXXXXXX YYYY" else "XXXXXXXX YYYYYYYY"
         GameSystem.N64 -> "XXXXXXXX YYYY"
         GameSystem.NDS -> "XXXXXXXX YYYYYYYY"
         GameSystem.GENESIS -> if (format == CheatFormat.GAME_GENIE) "XXXX-XXXX" else "XXXXXX:YYYY"
-        else -> "Code"
+        else -> strings[StrKey.CHEAT_PLACEHOLDER_GENERIC]
     }
 
     /** Normalizes one line: uppercase, collapse whitespace, auto-insert separators. */
@@ -121,16 +133,28 @@ object CheatValidator {
         return s
     }
 
-    fun validate(code: String, system: GameSystem, format: CheatFormat): Result {
+    fun validate(
+        code: String,
+        system: GameSystem,
+        format: CheatFormat,
+        strings: DeltaStrings = DeltaI18n.currentStrings(),
+    ): Result {
         val lines = code.split('\n', '+', ';').map { it.trim() }.filter { it.isNotEmpty() }
-        if (lines.isEmpty()) return Result.Invalid("Code is empty.")
+        if (lines.isEmpty()) return Result.Invalid(strings[StrKey.CHEAT_ERR_EMPTY])
         val pattern = linePattern(system, format)
-            ?: return Result.Invalid("${format.displayName} codes are not supported for ${system.displayName}.")
+            ?: return Result.Invalid(strings.format(StrKey.CHEAT_ERR_UNSUPPORTED, format.localizedName(strings), system.displayName))
         val normalized = ArrayList<String>()
         for (line in lines) {
             val n = normalizeLine(line, system, format)
             if (!pattern.matches(n)) {
-                return Result.Invalid("“$line” is not a valid ${format.displayName} code (expected ${placeholder(system, format)}).")
+                return Result.Invalid(
+                    strings.format(
+                        StrKey.CHEAT_ERR_INVALID,
+                        line,
+                        format.localizedName(strings),
+                        placeholder(system, format, strings),
+                    ),
+                )
             }
             normalized += n
         }

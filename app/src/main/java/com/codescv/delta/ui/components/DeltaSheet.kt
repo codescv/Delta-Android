@@ -24,6 +24,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.codescv.delta.i18n.StrKey
+import com.codescv.delta.i18n.str
 import com.codescv.delta.ui.theme.DeltaColors
 import com.codescv.delta.ui.theme.DeltaType
 
@@ -38,7 +40,7 @@ fun DeltaSheet(
     onDismiss: () -> Unit,
     leadingLabel: String? = null,
     onLeading: (() -> Unit)? = null,
-    trailingLabel: String? = "Done",
+    trailingLabel: String? = str(StrKey.COMMON_DONE),
     onTrailing: (() -> Unit)? = onDismiss,
     halfHeight: Boolean = false,
     scrollable: Boolean = true,

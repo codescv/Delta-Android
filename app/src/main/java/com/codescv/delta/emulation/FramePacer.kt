@@ -1,5 +1,9 @@
 package com.codescv.delta.emulation
 
+import com.codescv.delta.i18n.DeltaI18n
+import com.codescv.delta.i18n.DeltaStrings
+import com.codescv.delta.i18n.StrKey
+
 /** Delta's `FramePacer` (core/emu_util.cc): accumulator-based frame pacing with fast forward. */
 class FramePacer(coreFps: Double = 60.0) {
     var coreFps: Double = sanitize(coreFps)
@@ -39,6 +43,11 @@ class FramePacer(coreFps: Double = 60.0) {
 enum class FastForwardMode(val raw: String, val title: String) {
     HOLD("hold", "Hold to Fast-Forward"),
     TOGGLE("toggle", "Tap to Toggle");
+
+    fun localizedTitle(strings: DeltaStrings = DeltaI18n.currentStrings()): String = when (this) {
+        HOLD -> strings[StrKey.CTRL_FF_HOLD]
+        TOGGLE -> strings[StrKey.CTRL_FF_TOGGLE]
+    }
 
     companion object {
         fun fromRaw(raw: String?) = entries.firstOrNull { it.raw == raw } ?: TOGGLE

@@ -55,6 +55,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import com.codescv.delta.DeltaApplication
 import com.codescv.delta.emulation.EmulatorSession
+import com.codescv.delta.i18n.DeltaI18n
+import com.codescv.delta.i18n.DeltaStrings
+import com.codescv.delta.i18n.LocalDeltaStrings
+import com.codescv.delta.i18n.StrKey
+import com.codescv.delta.i18n.str
 import com.codescv.delta.library.RomEntry
 import com.codescv.delta.saves.SaveStateInfo
 import com.codescv.delta.saves.SaveStateType
@@ -68,19 +73,20 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
-import java.text.SimpleDateFormat
+import java.text.DateFormat
 import java.util.Date
-import java.util.Locale
 
 /** How the save-state list is used. */
 enum class SaveStatesMode { SAVE, LOAD, MANAGE }
 
-private val DATE_FORMAT = SimpleDateFormat("MMM d, yyyy · h:mm a", Locale.US)
+private fun formatSaveStateDate(epochMs: Long, strings: DeltaStrings): String =
+    DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT, strings.language.locale)
+        .format(Date(epochMs))
 
-fun SaveStateInfo.displayTitle(): String = when (type) {
-    SaveStateType.AUTO -> "Auto Save"
-    SaveStateType.QUICK -> "Quick Save"
-    else -> name ?: "Save State"
+fun SaveStateInfo.displayTitle(strings: DeltaStrings = DeltaI18n.currentStrings()): String = when (type) {
+    SaveStateType.AUTO -> strings[StrKey.SAVES_AUTO_SAVE]
+    SaveStateType.QUICK -> strings[StrKey.SAVES_QUICK_SAVE]
+    else -> name ?: strings[StrKey.SAVES_SAVE_STATE]
 }
 
 /**
@@ -101,6 +107,7 @@ fun SaveStatesSheet(
 ) {
     val saves = DeltaApplication.container.saves
     val context = LocalContext.current
+    val strings = LocalDeltaStrings.current
     val scope = rememberCoroutineScope()
     var revision by remember { mutableIntStateOf(0) }
     val sections by produceState(emptyMap<SaveStateType, List<SaveStateInfo>>(), revision) {
@@ -120,10 +127,10 @@ fun SaveStatesSheet(
             val err = withContext(Dispatchers.IO) {
                 runCatching {
                     val data = saves.exportState(rom, info.id)
-                    context.contentResolver.openOutputStream(uri)?.use { it.write(data) } ?: error("cannot write")
+                    context.contentResolver.openOutputStream(uri)?.use { it.write(data) } ?: error(DeltaI18n.tr(StrKey.SAVES_CANNOT_WRITE))
                 }.exceptionOrNull()
             }
-            if (err != null) alert = "Delta" to (err.message ?: "Export failed")
+            if (err != null) alert = "Delta" to (err.message ?: strings[StrKey.SAVES_EXPORT_FAILED])
         }
     }
     val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -133,11 +140,11 @@ fun SaveStatesSheet(
         scope.launch {
             val err = withContext(Dispatchers.IO) {
                 runCatching {
-                    val data = context.contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: error("cannot read")
+                    val data = context.contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: error(DeltaI18n.tr(StrKey.SAVES_CANNOT_READ))
                     saves.importState(data, rom, rom.system.coreId, targetId = target?.takeIf { it.isNotEmpty() })
                 }.exceptionOrNull()
             }
-            if (err != null) alert = "Delta" to (err.message ?: "Import failed")
+            if (err != null) alert = "Delta" to (err.message ?: strings[StrKey.SAVES_IMPORT_FAILED])
             revision++
         }
     }
@@ -150,7 +157,7 @@ fun SaveStatesSheet(
         }
         scope.launch {
             val ok = withContext(Dispatchers.IO) { session.loadState(info.id, quiet = true) }
-            if (ok) onLoaded() else alert = "Unable to Load State" to "Save states are tied to the core that created them."
+            if (ok) onLoaded() else alert = strings[StrKey.GAME_UNABLE_TO_LOAD_STATE] to strings[StrKey.SAVES_TIED_TO_CORE]
         }
     }
 
@@ -158,22 +165,22 @@ fun SaveStatesSheet(
         val s = session ?: return
         scope.launch {
             val info = withContext(Dispatchers.IO) { s.saveState(type, id = id, quiet = true) }
-            if (info != null) onSaved(info.displayTitle()) else alert = "Unable to Save State" to "The core could not create a save state."
+            if (info != null) onSaved(info.displayTitle(strings)) else alert = strings[StrKey.GAME_UNABLE_TO_SAVE_STATE] to strings[StrKey.SAVES_CORE_CANNOT_SAVE]
             revision++
         }
     }
 
     val title = when (mode) {
-        SaveStatesMode.SAVE -> "Save State"
-        SaveStatesMode.LOAD -> "Load State"
+        SaveStatesMode.SAVE -> str(StrKey.PAUSE_SAVE_STATE)
+        SaveStatesMode.LOAD -> str(StrKey.PAUSE_LOAD_STATE)
         SaveStatesMode.MANAGE -> rom.title
     }
     DeltaSheet(
         title = title,
         onDismiss = onDismiss,
-        leadingLabel = if (mode == SaveStatesMode.MANAGE) null else "Cancel",
+        leadingLabel = if (mode == SaveStatesMode.MANAGE) null else str(StrKey.COMMON_CANCEL),
         onLeading = if (mode == SaveStatesMode.MANAGE) null else onDismiss,
-        trailingLabel = if (mode == SaveStatesMode.MANAGE) "Done" else null,
+        trailingLabel = if (mode == SaveStatesMode.MANAGE) str(StrKey.COMMON_DONE) else null,
         onTrailing = if (mode == SaveStatesMode.MANAGE) onDismiss else null,
     ) {
         val autos = sections[SaveStateType.AUTO].orEmpty()
@@ -222,43 +229,43 @@ fun SaveStatesSheet(
         }
 
         if (mode != SaveStatesMode.SAVE) {
-            FormSection(header = "Auto Save") {
-                if (autos.isEmpty()) FormRow(title = "Empty", titleColor = DeltaColors.SystemGray) else rows(autos, false)
+            FormSection(header = str(StrKey.SAVES_AUTO_SAVE)) {
+                if (autos.isEmpty()) FormRow(title = str(StrKey.COMMON_EMPTY), titleColor = DeltaColors.SystemGray) else rows(autos, false)
             }
         }
-        FormSection(header = "Quick Save") {
+        FormSection(header = str(StrKey.SAVES_QUICK_SAVE)) {
             if (quick.isEmpty()) {
                 if (mode == SaveStatesMode.SAVE) {
-                    FormRow(title = "Quick Save", subtitle = "Empty", onClick = { save(SaveStateType.QUICK) }, trailing = {
+                    FormRow(title = str(StrKey.SAVES_QUICK_SAVE), subtitle = str(StrKey.COMMON_EMPTY), onClick = { save(SaveStateType.QUICK) }, trailing = {
                         Icon(Icons.Filled.SaveAlt, null, tint = DeltaColors.Purple)
                     })
                 } else {
-                    FormRow(title = "Empty", titleColor = DeltaColors.SystemGray)
+                    FormRow(title = str(StrKey.COMMON_EMPTY), titleColor = DeltaColors.SystemGray)
                 }
             } else {
                 rows(quick, true)
             }
         }
-        FormSection(header = "General", footer = if (mode == SaveStatesMode.SAVE) "Saving overwrites the selected slot." else null) {
+        FormSection(header = str(StrKey.SAVES_GENERAL), footer = if (mode == SaveStatesMode.SAVE) str(StrKey.SAVES_SAVE_OVERWRITES_FOOTER) else null) {
             if (mode == SaveStatesMode.SAVE) {
-                FormRow(title = "New Save State", titleColor = DeltaColors.Purple, onClick = { save(SaveStateType.GENERAL) }, trailing = {
+                FormRow(title = str(StrKey.SAVES_NEW_SAVE_STATE), titleColor = DeltaColors.Purple, onClick = { save(SaveStateType.GENERAL) }, trailing = {
                     Icon(Icons.Filled.Add, null, tint = DeltaColors.Purple)
                 })
                 if (general.isNotEmpty()) FormDivider()
             } else if (general.isEmpty()) {
-                FormRow(title = "Empty", titleColor = DeltaColors.SystemGray)
+                FormRow(title = str(StrKey.COMMON_EMPTY), titleColor = DeltaColors.SystemGray)
             }
             rows(general, true)
         }
         FormSection(
-            header = "Locked",
-            footer = if (mode != SaveStatesMode.SAVE) "Save states are tied to the core that created them." else null,
+            header = str(StrKey.SAVES_LOCKED),
+            footer = if (mode != SaveStatesMode.SAVE) str(StrKey.SAVES_TIED_TO_CORE) else null,
         ) {
-            if (locked.isEmpty()) FormRow(title = "Empty", titleColor = DeltaColors.SystemGray) else rows(locked, false)
+            if (locked.isEmpty()) FormRow(title = str(StrKey.COMMON_EMPTY), titleColor = DeltaColors.SystemGray) else rows(locked, false)
         }
         if (mode == SaveStatesMode.MANAGE) {
             FormSection {
-                FormRow(title = "Import Save State…", titleColor = DeltaColors.Purple, onClick = {
+                FormRow(title = str(StrKey.SAVES_IMPORT_STATE), titleColor = DeltaColors.Purple, onClick = {
                     importTarget = ""
                     importLauncher.launch(arrayOf("*/*"))
                 })
@@ -271,14 +278,14 @@ fun SaveStatesSheet(
             onDismissRequest = { alert = null },
             title = { Text(t) },
             text = { Text(m) },
-            confirmButton = { TextButton(onClick = { alert = null }) { Text("OK") } },
+            confirmButton = { TextButton(onClick = { alert = null }) { Text(str(StrKey.COMMON_OK)) } },
         )
     }
     renaming?.let { info ->
-        var text by remember(info.id) { mutableStateOf(info.name ?: info.displayTitle()) }
+        var text by remember(info.id) { mutableStateOf(info.name ?: info.displayTitle(strings)) }
         AlertDialog(
             onDismissRequest = { renaming = null },
-            title = { Text("Rename Save State") },
+            title = { Text(str(StrKey.SAVES_RENAME_TITLE)) },
             text = { TextField(value = text, onValueChange = { text = it }, singleLine = true) },
             confirmButton = {
                 TextButton(onClick = {
@@ -288,9 +295,9 @@ fun SaveStatesSheet(
                         withContext(Dispatchers.IO) { saves.rename(rom, id, text) }
                         revision++
                     }
-                }) { Text("Save") }
+                }) { Text(str(StrKey.COMMON_SAVE)) }
             },
-            dismissButton = { TextButton(onClick = { renaming = null }) { Text("Cancel") } },
+            dismissButton = { TextButton(onClick = { renaming = null }) { Text(str(StrKey.COMMON_CANCEL)) } },
         )
     }
     preview?.let { info ->
@@ -304,8 +311,8 @@ fun SaveStatesSheet(
                     Image(img, null, filterQuality = FilterQuality.None, contentScale = ContentScale.Fit, modifier = Modifier.fillMaxWidth().aspectRatio(img.width.toFloat() / img.height))
                 }
                 Spacer(Modifier.size(8.dp))
-                Text(info.displayTitle(), style = DeltaType.Headline, color = Color.White)
-                Text(DATE_FORMAT.format(Date(info.modifiedAt)), style = DeltaType.Caption, color = DeltaColors.SystemGray)
+                Text(info.displayTitle(strings), style = DeltaType.Headline, color = Color.White)
+                Text(formatSaveStateDate(info.modifiedAt, strings), style = DeltaType.Caption, color = DeltaColors.SystemGray)
             }
         }
     }
@@ -339,6 +346,7 @@ private fun SaveStateRow(
     onDelete: (() -> Unit)?,
 ) {
     val saves = DeltaApplication.container.saves
+    val strings = LocalDeltaStrings.current
     var menu by remember { mutableStateOf(false) }
     val thumb = rememberThumbnail(saves.screenshotFile(rom, info.id), revision)
     Row(
@@ -362,13 +370,13 @@ private fun SaveStateRow(
         }
         Column(Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(info.displayTitle(), style = DeltaType.Headline, color = if (enabled) Color.White else DeltaColors.SystemGray)
+                Text(info.displayTitle(strings), style = DeltaType.Headline, color = if (enabled) Color.White else DeltaColors.SystemGray)
                 if (info.isLocked) {
                     Spacer(Modifier.width(4.dp))
                     Icon(Icons.Filled.Lock, null, tint = DeltaColors.SystemGray, modifier = Modifier.size(14.dp))
                 }
             }
-            Text(DATE_FORMAT.format(Date(info.modifiedAt)), style = DeltaType.Caption, color = DeltaColors.SystemGray)
+            Text(formatSaveStateDate(info.modifiedAt, strings), style = DeltaType.Caption, color = DeltaColors.SystemGray)
         }
         if (mode == SaveStatesMode.SAVE && enabled) {
             Icon(Icons.Filled.SaveAlt, null, tint = DeltaColors.Purple)
@@ -376,20 +384,23 @@ private fun SaveStateRow(
             Icon(Icons.Filled.PlayArrow, null, tint = DeltaColors.Purple)
         }
         Box {
-            IconButton(onClick = { menu = true }) { Icon(Icons.Filled.MoreHoriz, "Options", tint = DeltaColors.Purple) }
+            IconButton(onClick = { menu = true }) { Icon(Icons.Filled.MoreHoriz, str(StrKey.COMMON_OPTIONS), tint = DeltaColors.Purple) }
             DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                DropdownMenuItem(text = { Text("Load") }, onClick = { menu = false; onLoad() })
-                DropdownMenuItem(text = { Text("Rename…") }, onClick = { menu = false; onRename() })
-                DropdownMenuItem(text = { Text("Preview") }, onClick = { menu = false; onPreview() })
+                DropdownMenuItem(text = { Text(str(StrKey.SAVES_ACTION_LOAD)) }, onClick = { menu = false; onLoad() })
+                DropdownMenuItem(text = { Text(str(StrKey.SAVES_ACTION_RENAME)) }, onClick = { menu = false; onRename() })
+                DropdownMenuItem(text = { Text(str(StrKey.SAVES_ACTION_PREVIEW)) }, onClick = { menu = false; onPreview() })
                 if (!info.isAuto && info.kind == SaveStateInfo.KIND_GENERAL) {
-                    DropdownMenuItem(text = { Text(if (info.isLocked) "Unlock" else "Lock") }, onClick = { menu = false; onToggleLock() })
+                    DropdownMenuItem(
+                        text = { Text(str(if (info.isLocked) StrKey.SAVES_ACTION_UNLOCK else StrKey.SAVES_ACTION_LOCK)) },
+                        onClick = { menu = false; onToggleLock() },
+                    )
                 }
-                DropdownMenuItem(text = { Text("Export (.svs)…") }, onClick = { menu = false; onExport() })
+                DropdownMenuItem(text = { Text(str(StrKey.SAVES_ACTION_EXPORT)) }, onClick = { menu = false; onExport() })
                 if (onImportInto != null) {
-                    DropdownMenuItem(text = { Text("Import into Slot…") }, onClick = { menu = false; onImportInto() })
+                    DropdownMenuItem(text = { Text(str(StrKey.SAVES_ACTION_IMPORT_INTO)) }, onClick = { menu = false; onImportInto() })
                 }
                 if (onDelete != null) {
-                    DropdownMenuItem(text = { Text("Delete", color = Color(0xFFFF453A)) }, onClick = { menu = false; onDelete() })
+                    DropdownMenuItem(text = { Text(str(StrKey.COMMON_DELETE), color = Color(0xFFFF453A)) }, onClick = { menu = false; onDelete() })
                 }
             }
         }

@@ -67,6 +67,10 @@ import androidx.compose.ui.unit.sp
 import com.codescv.delta.DeltaApplication
 import com.codescv.delta.emulation.EmulatorSession
 import com.codescv.delta.emulation.FastForwardController
+import com.codescv.delta.i18n.DeltaI18n
+import com.codescv.delta.i18n.LocalDeltaStrings
+import com.codescv.delta.i18n.StrKey
+import com.codescv.delta.i18n.str
 import com.codescv.delta.library.RomEntry
 import com.codescv.delta.ui.saves.SaveStatesMode
 import com.codescv.delta.ui.saves.SaveStatesSheet
@@ -115,6 +119,7 @@ fun PauseMenu(
         }
     }
 
+    val strings = LocalDeltaStrings.current
     Box(
         Modifier
             .fillMaxSize()
@@ -123,23 +128,28 @@ fun PauseMenu(
         // Tile grid.
         val columns = if (portrait) 2 else 3
         val tiles = listOf(
-            PauseTileSpec("Save State", "PauseSaveState") { sheet = PauseSheet.SAVE_STATE },
-            PauseTileSpec("Load State", "PauseLoadState") { sheet = PauseSheet.LOAD_STATE },
-            PauseTileSpec("Cheat Codes", "PauseCheatCodes") { sheet = PauseSheet.CHEAT_CODES },
-            PauseTileSpec("Fast Forward", "PauseFastForward", selected = ui.fastForwardActive) {
+            PauseTileSpec(str(StrKey.PAUSE_SAVE_STATE), "PauseSaveState") { sheet = PauseSheet.SAVE_STATE },
+            PauseTileSpec(str(StrKey.PAUSE_LOAD_STATE), "PauseLoadState") { sheet = PauseSheet.LOAD_STATE },
+            PauseTileSpec(str(StrKey.PAUSE_CHEAT_CODES), "PauseCheatCodes") { sheet = PauseSheet.CHEAT_CODES },
+            PauseTileSpec(
+                title = str(StrKey.PAUSE_FAST_FORWARD),
+                asset = "PauseFastForward",
+                selected = ui.fastForwardActive,
+                isFastForward = true,
+            ) {
                 session?.setFastForwardActive(!(session.fastForward.isActive))
                 ui.fastForwardActive = session?.fastForward?.isActive == true
             },
-            PauseTileSpec("Hold Buttons", "PauseHoldButtons", selected = ui.held.isNotEmpty()) {
+            PauseTileSpec(str(StrKey.PAUSE_HOLD_BUTTONS), "PauseHoldButtons", selected = ui.held.isNotEmpty()) {
                 if (ui.held.isEmpty()) {
                     sheet = PauseSheet.HOLD_BUTTONS
                 } else {
                     session?.releaseHeldButtons()
                     ui.held = emptySet()
-                    showToast("Released Held Buttons")
+                    showToast(strings[StrKey.PAUSE_RELEASED_HELD_BUTTONS])
                 }
             },
-            PauseTileSpec("Screenshot", "PauseScreenshot") {
+            PauseTileSpec(str(StrKey.PAUSE_SCREENSHOT), "PauseScreenshot") {
                 scope.launch {
                     val msg = withContext(Dispatchers.IO) { takeScreenshot(context, rom, session) }
                     showToast(msg)
@@ -154,7 +164,7 @@ fun PauseMenu(
             tiles.chunked(columns).forEach { row ->
                 Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                     row.forEach { spec ->
-                        if (spec.title == "Fast Forward") {
+                        if (spec.isFastForward) {
                             FastForwardTile(spec, ui, session)
                         } else {
                             PauseMenuTile(spec)
@@ -170,21 +180,21 @@ fun PauseMenu(
                 icon = { Icon(Icons.Filled.MoreHoriz, null, tint = Color.White, modifier = Modifier.size(20.dp)) },
                 size = 44.dp,
                 fill = null,
-                label = "More Options",
+                label = str(StrKey.PAUSE_MORE_OPTIONS),
                 modifier = Modifier.align(Alignment.TopEnd),
             ) { sheet = PauseSheet.MORE }
             PauseMenuCircleButton(
                 icon = { Icon(Icons.Filled.Home, null, tint = Color.White, modifier = Modifier.size(22.dp)) },
                 size = 52.dp,
                 fill = null,
-                label = "Home",
+                label = str(StrKey.PAUSE_HOME),
                 modifier = Modifier.align(Alignment.BottomStart),
             ) { onExit() }
             PauseMenuCircleButton(
                 icon = { Icon(Icons.Filled.PlayArrow, null, tint = Color.White, modifier = Modifier.size(26.dp)) },
                 size = 52.dp,
                 fill = DeltaColors.PlayPurple,
-                label = "Resume",
+                label = str(StrKey.PAUSE_RESUME),
                 modifier = Modifier.align(Alignment.BottomEnd),
             ) { onResume() }
         }
@@ -216,7 +226,7 @@ fun PauseMenu(
             onDismiss = { sheet = null },
             onSaved = { name ->
                 sheet = null
-                showToast("Saved to $name")
+                showToast(strings.format(StrKey.PAUSE_SAVED_TO, name))
             },
         )
         PauseSheet.LOAD_STATE -> SaveStatesSheet(
@@ -259,6 +269,7 @@ private class PauseTileSpec(
     val title: String,
     val asset: String,
     val selected: Boolean = false,
+    val isFastForward: Boolean = false,
     val onClick: () -> Unit,
 )
 
@@ -383,7 +394,7 @@ private fun Modifier.combinedClickableCompat(interaction: MutableInteractionSour
  * `filesDir/Screenshots/<Safe Title> yyyy-MM-dd HH.mm.ss.png`.
  */
 fun takeScreenshot(context: Context, rom: RomEntry, session: EmulatorSession?): String {
-    val png = session?.screenshotPng(1080) ?: return "Unable to Take Screenshot"
+    val png = session?.screenshotPng(1080) ?: return DeltaI18n.tr(StrKey.PAUSE_SCREENSHOT_UNABLE_TAKE)
     val safe = rom.title.map { if (it in "/\\:?%*|\"<>") '_' else it }.joinToString("")
     val stamp = SimpleDateFormat("yyyy-MM-dd HH.mm.ss", Locale.US).format(Date())
     val dir = DeltaApplication.container.screenshotsDir
@@ -402,15 +413,15 @@ fun takeScreenshot(context: Context, rom: RomEntry, session: EmulatorSession?): 
             val uri = context.contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)
             if (uri != null) {
                 context.contentResolver.openOutputStream(uri)?.use { it.write(png) }
-                "Screenshot Saved to Photos"
+                DeltaI18n.tr(StrKey.PAUSE_SCREENSHOT_SAVED_PHOTOS)
             } else {
-                "Screenshot Saved to Files › Screenshots"
+                DeltaI18n.tr(StrKey.PAUSE_SCREENSHOT_SAVED_FILES)
             }
         } else {
-            "Screenshot Saved to Files › Screenshots"
+            DeltaI18n.tr(StrKey.PAUSE_SCREENSHOT_SAVED_FILES)
         }
     } catch (e: Exception) {
-        "Unable to Save Screenshot"
+        DeltaI18n.tr(StrKey.PAUSE_SCREENSHOT_UNABLE_SAVE)
     }
 }
 

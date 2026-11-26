@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Version 2.0.5 tracked the iOS Delta release this port is based on; later
 versions are Android-only updates.
 
+## [2.2.0] - 2026-11-26
+
+### Added
+
+- **App language setting (Settings › Display › Language)**: Choose **System Default** (`跟随系统` / `System Default` / `システムに従う`), **中文**, **English**, or **日本語**. The default is System Default: `zh*` → Simplified Chinese, `ja*` → Japanese, anything else → English. The choice is saved in `preferences.json` and applies immediately, with no app restart.
+- **Full Japanese localization** (`values-ja` + in-app string catalog).
+
+### Changed
+
+- **Each UI language is now fully single-language**: Settings, Library, context menus, pause menu, save states, the save conflict picker, cheats, Delta Sync / Google OAuth, updater, feedback, and error/toast messages are localized consistently across English, Simplified Chinese and Japanese. Mixed CN/EN strings such as `Support / 更新与反馈` and `检查更新 (Check for Updates)` are gone, and so is the split where Chinese devices showed some Settings sections in Chinese and others in English.
+- Proper nouns are kept as-is: console and core names, BIOS filenames, WFC servers, cheat formats, Google Drive, Delta Sync, RetroAchievements, and Epilogue Operator.
+
 ## [2.1.0] - 2026-11-20
 
 ### Added

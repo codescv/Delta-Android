@@ -19,6 +19,7 @@ import android.widget.Toast
 import androidx.core.content.FileProvider
 import com.codescv.delta.BuildConfig
 import com.codescv.delta.R
+import com.codescv.delta.i18n.DeltaI18n
 import java.io.File
 import java.io.IOException
 import java.net.URLEncoder
@@ -588,9 +589,10 @@ object AgentFeedbackHelper {
         context: Context,
         messageRes: Int,
     ) {
+        val loc = DeltaI18n.localizedContext(context)
         Toast.makeText(
             context.applicationContext,
-            context.getString(messageRes),
+            loc.getString(messageRes),
             Toast.LENGTH_LONG,
         ).show()
     }

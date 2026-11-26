@@ -1,5 +1,7 @@
 package com.codescv.delta.saves
 
+import com.codescv.delta.i18n.DeltaI18n
+import com.codescv.delta.i18n.StrKey
 import com.codescv.delta.library.RomEntry
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
@@ -11,17 +13,18 @@ import java.util.UUID
 
 class SaveTransferException(message: String) : Exception(message) {
     companion object {
-        fun gameRunning() = SaveTransferException("Close the running game before transferring saves.")
-        fun emptyFile() = SaveTransferException("The selected file is empty.")
-        fun tooLarge(size: Int) = SaveTransferException("The selected file is too large ($size bytes, max 16 MiB).")
-        fun zipArchive() = SaveTransferException("That file is a ZIP archive, not a raw save. Extract the .srm/.sav first.")
-        fun noSaveYet() = SaveTransferException("This game has no save yet.")
-        fun verificationFailed() = SaveTransferException("The save could not be verified after writing.")
-        fun invalidState(why: String) = SaveTransferException("Not a valid save state: $why.")
-        fun wrongSystem(expected: String, found: String) = SaveTransferException("This save state is for $found, not $expected.")
+        fun gameRunning() = SaveTransferException(DeltaI18n.tr(StrKey.ERR_SAVE_GAME_RUNNING))
+        fun emptyFile() = SaveTransferException(DeltaI18n.tr(StrKey.ERR_SAVE_EMPTY_FILE))
+        fun tooLarge(size: Int) = SaveTransferException(DeltaI18n.tr(StrKey.ERR_SAVE_TOO_LARGE, size))
+        fun zipArchive() = SaveTransferException(DeltaI18n.tr(StrKey.ERR_SAVE_ZIP_ARCHIVE))
+        fun noSaveYet() = SaveTransferException(DeltaI18n.tr(StrKey.ERR_SAVE_NO_SAVE_YET))
+        fun verificationFailed() = SaveTransferException(DeltaI18n.tr(StrKey.ERR_SAVE_VERIFICATION_FAILED))
+        fun invalidState(why: String) = SaveTransferException(DeltaI18n.tr(StrKey.ERR_SAVE_INVALID_STATE, why))
+        fun wrongSystem(expected: String, found: String) =
+            SaveTransferException(DeltaI18n.tr(StrKey.ERR_SAVE_WRONG_SYSTEM, found, expected))
         fun wrongCore(expected: String, found: String) =
-            SaveTransferException("This save state was made with core $found, but this game uses $expected.")
-        fun locked() = SaveTransferException("This save state is locked. Unlock it first.")
+            SaveTransferException(DeltaI18n.tr(StrKey.ERR_SAVE_WRONG_CORE, found, expected))
+        fun locked() = SaveTransferException(DeltaI18n.tr(StrKey.ERR_SAVE_LOCKED))
     }
 }
 
@@ -65,7 +68,7 @@ object SaveStateContainer {
         val buf = ByteBuffer.wrap(data).order(ByteOrder.LITTLE_ENDIAN)
         buf.position(4)
         fun need(n: Int) {
-            if (buf.remaining() < n) throw SaveTransferException.invalidState("truncated header")
+            if (buf.remaining() < n) throw SaveTransferException.invalidState(DeltaI18n.tr(StrKey.ERR_SAVE_TRUNCATED_HEADER))
         }
         fun str(): String {
             need(2)
@@ -77,7 +80,7 @@ object SaveStateContainer {
         }
         need(4)
         val ver = buf.int
-        if (ver != VERSION) throw SaveTransferException.invalidState("unsupported version $ver")
+        if (ver != VERSION) throw SaveTransferException.invalidState(DeltaI18n.tr(StrKey.ERR_SAVE_UNSUPPORTED_VERSION, ver))
         val core = str()
         val system = str()
         need(4)
@@ -86,7 +89,7 @@ object SaveStateContainer {
         val time = java.lang.Double.longBitsToDouble(buf.long)
         need(4)
         val length = buf.int
-        if (length <= 0 || buf.remaining() != length) throw SaveTransferException.invalidState("payload length mismatch")
+        if (length <= 0 || buf.remaining() != length) throw SaveTransferException.invalidState(DeltaI18n.tr(StrKey.ERR_SAVE_PAYLOAD_MISMATCH))
         val payload = ByteArray(length)
         buf.get(payload)
         return SaveStateHeader(core, system, crc, time) to payload
@@ -283,8 +286,8 @@ class SaveFileManager(val root: File) {
     private fun nextGeneralName(rom: RomEntry): String {
         val used = listStates(rom).mapNotNull { it.name }.toSet()
         var n = listStates(rom).count { it.kind == SaveStateInfo.KIND_GENERAL } + 1
-        while ("Save State $n" in used) n++
-        return "Save State $n"
+        while (DeltaI18n.tr(StrKey.SAVES_DEFAULT_NUMBERED, n) in used) n++
+        return DeltaI18n.tr(StrKey.SAVES_DEFAULT_NUMBERED, n)
     }
 
     fun readState(rom: RomEntry, id: String): Pair<SaveStateHeader?, ByteArray> {

@@ -27,6 +27,10 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.codescv.delta.DeltaApplication
 import com.codescv.delta.emulation.NativeBridge
+import com.codescv.delta.i18n.DeltaI18n
+import com.codescv.delta.i18n.LocalDeltaStrings
+import com.codescv.delta.i18n.StrKey
+import com.codescv.delta.i18n.str
 import com.codescv.delta.model.GameSystem
 import com.codescv.delta.settings.AppPreferences
 import com.codescv.delta.settings.VideoFilter
@@ -51,13 +55,13 @@ import java.util.concurrent.ConcurrentHashMap
 @Composable
 internal fun AudioSettings(prefs: AppPreferences, nav: SettingsNav) {
     SettingsPage {
-        FormSection(footer = "When enabled, Delta will only play game audio if your device isn't silenced.") {
-            FormToggleRow("Respect Silent Mode", prefs.respectSilentMode, { v -> nav.update { it.copy(respectSilentMode = v) } })
+        FormSection(footer = str(StrKey.AUDIO_RESPECT_SILENT_FOOTER)) {
+            FormToggleRow(str(StrKey.AUDIO_RESPECT_SILENT), prefs.respectSilentMode, { v -> nav.update { it.copy(respectSilentMode = v) } })
         }
         FormSection {
-            FormToggleRow("Mute Audio", prefs.muteAudio, { v -> nav.update { it.copy(muteAudio = v) } })
+            FormToggleRow(str(StrKey.AUDIO_MUTE), prefs.muteAudio, { v -> nav.update { it.copy(muteAudio = v) } })
         }
-        FormSection(header = "Game Volume") {
+        FormSection(header = str(StrKey.AUDIO_VOLUME_HEADER)) {
             FormSliderRow(
                 value = prefs.volume.toFloat(),
                 onValueChange = { v -> nav.update { it.copy(volume = v.coerceIn(0f, 1f).toDouble()) } },
@@ -72,16 +76,17 @@ internal fun AudioSettings(prefs: AppPreferences, nav: SettingsNav) {
 
 @Composable
 internal fun VideoSettings(prefs: AppPreferences, nav: SettingsNav) {
+    val strings = LocalDeltaStrings.current
     SettingsPage {
-        FormSection(footer = "Integer scaling keeps pixels perfectly square by scaling the game in whole steps.") {
+        FormSection(footer = str(StrKey.VIDEO_INTEGER_SCALING_FOOTER)) {
             PickerRow(
-                title = "Video Filter",
-                options = VideoFilter.entries.map { it.raw to it.title },
+                title = str(StrKey.VIDEO_FILTER_TITLE),
+                options = VideoFilter.entries.map { it.raw to it.localizedTitle(strings) },
                 selected = VideoFilter.fromRaw(prefs.filter).raw,
                 onSelect = { v -> nav.update { it.copy(filter = v) } },
             )
             FormDivider()
-            FormToggleRow("Integer Scaling", prefs.integerScaling, { v -> nav.update { it.copy(integerScaling = v) } })
+            FormToggleRow(str(StrKey.MORE_INTEGER_SCALING), prefs.integerScaling, { v -> nav.update { it.copy(integerScaling = v) } })
         }
     }
 }
@@ -151,7 +156,7 @@ private fun AppPreferences.withCoreOption(coreId: String, key: String, value: St
 internal fun CoresSettings(prefs: AppPreferences, nav: SettingsNav) {
     val n64Options = rememberCoreOptions(SettingsData.N64_CORE_ID)
     SettingsPage {
-        FormSection(header = "Registered Delta Cores") {
+        FormSection(header = str(StrKey.CORES_REGISTERED_HEADER)) {
             SettingsData.coreSystems.forEachIndexed { i, system ->
                 if (i > 0) FormDivider()
                 FormRow(
@@ -164,17 +169,17 @@ internal fun CoresSettings(prefs: AppPreferences, nav: SettingsNav) {
         }
         FormSection(header = "Nintendo DS") {
             FormRow(
-                title = SettingsData.MELONDS_ROW,
-                value = if (prefs.ndsBiosMode == "external") "Imported BIOS" else SettingsData.BUILT_IN_BIOS,
+                title = str(StrKey.CORES_MELONDS_ROW),
+                value = str(if (prefs.ndsBiosMode == "external") StrKey.CORES_IMPORTED_BIOS else StrKey.CORES_BUILT_IN_BIOS),
                 chevron = true,
                 onClick = { nav.push(SettingsRoute.MelonDsBios) },
             )
         }
-        FormSection(header = "Nintendo 64", footer = "Changes apply the next time a game starts.") {
+        FormSection(header = "Nintendo 64", footer = str(StrKey.CORES_NEXT_START_FOOTER)) {
             val coreId = SettingsData.N64_CORE_ID
             val aspect = n64Options?.firstOrNull { it.key == SettingsData.N64_ASPECT_KEY }
             FormToggleRow(
-                title = "Widescreen (16:9)",
+                title = str(StrKey.CORES_WIDESCREEN),
                 checked = prefs.coreOptions[coreId]?.get(SettingsData.N64_ASPECT_KEY) == "widescreen",
                 onCheckedChange = { on ->
                     nav.update { it.withCoreOption(coreId, SettingsData.N64_ASPECT_KEY, if (on) "widescreen" else "normal") }
@@ -184,7 +189,7 @@ internal fun CoresSettings(prefs: AppPreferences, nav: SettingsNav) {
             n64Options?.firstOrNull { it.key == SettingsData.N64_RESOLUTION_KEY }?.let { res ->
                 FormDivider()
                 PickerRow(
-                    title = "Resolution",
+                    title = str(StrKey.CORES_RESOLUTION),
                     options = res.values.map { it to res.label(it) },
                     selected = prefs.coreOption(coreId, res),
                     onSelect = { v -> nav.update { it.withCoreOption(coreId, res.key, v) } },
@@ -192,7 +197,7 @@ internal fun CoresSettings(prefs: AppPreferences, nav: SettingsNav) {
             }
             FormDivider()
             FormRow(
-                title = "Core Options",
+                title = str(StrKey.MORE_CORE_OPTIONS),
                 chevron = true,
                 onClick = { nav.push(SettingsRoute.CoreOptions(coreId, GameSystem.N64.coreDisplayName)) },
             )
@@ -205,10 +210,10 @@ internal fun CoreOptionsSettings(coreId: String, prefs: AppPreferences, nav: Set
     val options = rememberCoreOptions(coreId)
     SettingsPage {
         val visible = options?.filter { it.visible }
-        FormSection(header = "Core Options", footer = "Changes apply the next time a game starts.") {
+        FormSection(header = str(StrKey.MORE_CORE_OPTIONS), footer = str(StrKey.CORES_NEXT_START_FOOTER)) {
             when {
-                visible == null -> FormRow(title = "Loading…", titleColor = DeltaColors.SystemGray)
-                visible.isEmpty() -> FormRow(title = "No Options", titleColor = DeltaColors.SystemGray)
+                visible == null -> FormRow(title = str(StrKey.COMMON_LOADING), titleColor = DeltaColors.SystemGray)
+                visible.isEmpty() -> FormRow(title = str(StrKey.CORES_NO_OPTIONS), titleColor = DeltaColors.SystemGray)
                 else -> visible.forEachIndexed { i, option ->
                     if (i > 0) FormDivider()
                     FormRow(
@@ -222,7 +227,7 @@ internal fun CoreOptionsSettings(coreId: String, prefs: AppPreferences, nav: Set
         }
         if (!prefs.coreOptions[coreId].isNullOrEmpty()) {
             FormSection {
-                ActionRow("Reset Core Options", Icons.Outlined.Replay, DestructiveRed) {
+                ActionRow(str(StrKey.CORES_RESET_OPTIONS), Icons.Outlined.Replay, DestructiveRed) {
                     nav.update { it.copy(coreOptions = it.coreOptions - coreId) }
                 }
             }
@@ -236,7 +241,7 @@ internal fun CoreOptionValuesSettings(coreId: String, optionKey: String, prefs: 
     SettingsPage {
         FormSection(footer = option?.info?.ifBlank { null }) {
             if (option == null) {
-                FormRow(title = "Loading…", titleColor = DeltaColors.SystemGray)
+                FormRow(title = str(StrKey.COMMON_LOADING), titleColor = DeltaColors.SystemGray)
             } else {
                 val current = prefs.coreOption(coreId, option)
                 option.values.forEachIndexed { i, v ->
@@ -244,7 +249,7 @@ internal fun CoreOptionValuesSettings(coreId: String, optionKey: String, prefs: 
                     FormCheckRow(
                         title = option.label(v),
                         selected = v == current,
-                        subtitle = if (v == option.default) "Default" else null,
+                        subtitle = if (v == option.default) str(StrKey.COMMON_DEFAULT) else null,
                     ) { nav.update { it.withCoreOption(coreId, option.key, v) } }
                 }
             }
@@ -257,6 +262,7 @@ internal fun CoreOptionValuesSettings(coreId: String, optionKey: String, prefs: 
 @Composable
 internal fun MelonDsBiosSettings(prefs: AppPreferences, nav: SettingsNav) {
     val context = LocalContext.current
+    val strings = LocalDeltaStrings.current
     val scope = rememberCoroutineScope()
     var revision by remember { mutableIntStateOf(0) }
     var pending by remember { mutableStateOf<String?>(null) }
@@ -290,24 +296,24 @@ internal fun MelonDsBiosSettings(prefs: AppPreferences, nav: SettingsNav) {
     }
 
     SettingsPage {
-        listOf(false to "Nintendo DS BIOS", true to "Nintendo DSi BIOS").forEach { (dsi, header) ->
+        listOf(false to str(StrKey.BIOS_NDS_HEADER), true to str(StrKey.BIOS_NDSI_HEADER)).forEach { (dsi, header) ->
             FormSection(header = header) {
                 SettingsData.biosFiles.filter { it.isDSi == dsi }.forEachIndexed { i, file ->
                     if (i > 0) FormDivider()
                     FormRow(
                         title = file.filename,
-                        subtitle = SettingsData.biosStatus(file, sizes[file.filename]),
-                        value = if (sizes.containsKey(file.filename)) null else "Import…",
+                        subtitle = SettingsData.biosStatus(file, sizes[file.filename], strings),
+                        value = if (sizes.containsKey(file.filename)) null else str(StrKey.BIOS_IMPORT_ACTION),
                         onClick = { tap(file.filename) },
                     )
                 }
             }
         }
         FormSection(
-            header = "BIOS Mode",
-            footer = "The built-in BIOS works for most games. Import bios7.bin, bios9.bin and firmware.bin and choose Imported Files to boot with your own BIOS.",
+            header = str(StrKey.BIOS_MODE_HEADER),
+            footer = str(StrKey.BIOS_MODE_FOOTER),
         ) {
-            val modes = SettingsData.ndsBiosModes
+            val modes = SettingsData.ndsBiosModes(strings)
             FormSegmentedRow(
                 title = null,
                 options = modes.map { it.second },
@@ -327,7 +333,7 @@ internal fun MelonDsBiosSettings(prefs: AppPreferences, nav: SettingsNav) {
                     manage = null
                     pending = filename
                     importer.launch(arrayOf("*/*"))
-                }) { Text("Replace…", color = DeltaColors.Purple) }
+                }) { Text(str(StrKey.BIOS_REPLACE), color = DeltaColors.Purple) }
             },
             dismissButton = {
                 TextButton(onClick = {
@@ -336,7 +342,7 @@ internal fun MelonDsBiosSettings(prefs: AppPreferences, nav: SettingsNav) {
                         withContext(Dispatchers.IO) { File(systemDir, filename).delete() }
                         revision++
                     }
-                }) { Text("Remove", color = DestructiveRed) }
+                }) { Text(str(StrKey.BIOS_REMOVE), color = DestructiveRed) }
             },
         )
     }
@@ -347,13 +353,13 @@ private fun importBios(context: Context, uri: Uri, target: File): String = try {
     val copied = context.contentResolver.openInputStream(uri)?.use { input -> tmp.outputStream().use { input.copyTo(it) } } ?: 0L
     if (copied <= 0L) {
         tmp.delete()
-        "The selected file is empty."
+        DeltaI18n.tr(StrKey.BIOS_ERR_EMPTY)
     } else {
         if (!tmp.renameTo(target)) {
             target.delete()
             tmp.renameTo(target)
         }
-        "Imported ${target.name}."
+        DeltaI18n.tr(StrKey.BIOS_IMPORTED_MSG, target.name)
     }
 } catch (e: Exception) {
     e.message ?: e.toString()
@@ -363,13 +369,14 @@ private fun importBios(context: Context, uri: Uri, target: File): String = try {
 
 @Composable
 internal fun OnlineMultiplayerSettings(prefs: AppPreferences, nav: SettingsNav) {
+    val strings = LocalDeltaStrings.current
     SettingsPage {
         FormSection(
             header = "Nintendo DS",
-            footer = "Choose the 3rd-party Nintendo WFC server Delta should use for online play in Nintendo DS games.",
+            footer = str(StrKey.WFC_FOOTER),
         ) {
             PickerRow(
-                title = "WFC Server",
+                title = str(StrKey.WFC_SERVER_TITLE),
                 options = SettingsData.wfcServers.map { it.dns to it.title },
                 selected = prefs.preferredWFCServer,
                 onSelect = { v -> nav.update { it.copy(preferredWFCServer = v) } },
@@ -377,7 +384,7 @@ internal fun OnlineMultiplayerSettings(prefs: AppPreferences, nav: SettingsNav) 
         }
         SettingsData.wfcServers.firstOrNull { it.dns == prefs.preferredWFCServer }?.let { server ->
             FormSection {
-                FormRow(title = server.name, subtitle = server.summary, value = server.dns)
+                FormRow(title = server.name, subtitle = SettingsData.wfcSummary(server, strings), value = server.dns)
             }
         }
     }

@@ -29,6 +29,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
+import com.codescv.delta.i18n.DeltaI18n
+import com.codescv.delta.i18n.DeltaStrings
+import com.codescv.delta.i18n.LocalDeltaStrings
+import com.codescv.delta.i18n.StrKey
 import com.codescv.delta.ui.theme.DeltaColors
 import com.codescv.delta.ui.theme.DeltaType
 
@@ -53,21 +57,37 @@ data class GameMenuEntry(
 )
 
 /** Builds the context menu rows (pure; unit-tested). [info] null = still loading. */
-fun gameMenuEntries(isFavorite: Boolean, info: RomMenuInfo?): List<GameMenuEntry> = buildList {
-    add(GameMenuEntry(GameMenuAction.PLAY, "Play"))
-    if (info?.latestAutoStateId != null) add(GameMenuEntry(GameMenuAction.RESUME_AUTO_SAVE, "Resume Auto Save"))
-    add(GameMenuEntry(GameMenuAction.TOGGLE_FAVORITE, if (isFavorite) "Remove from Favorites" else "Add to Favorites"))
-    add(GameMenuEntry(GameMenuAction.RENAME, "Rename…"))
-    add(GameMenuEntry(GameMenuAction.FETCH_COVER, "Fetch Cover Artwork", section = "Cover Artwork"))
-    add(GameMenuEntry(GameMenuAction.CHANGE_COVER, "Change Cover Artwork…"))
-    add(GameMenuEntry(GameMenuAction.RESET_COVER, "Reset Cover Artwork"))
-    add(GameMenuEntry(GameMenuAction.IMPORT_SAVE, "Import Save File (.sav/.srm)…", section = "Game Save (.sav / .srm)", dividerBefore = true))
-    add(GameMenuEntry(GameMenuAction.EXPORT_SAVE, "Export Save File (.sav)…", enabled = info?.hasSaveRam == true))
-    add(GameMenuEntry(GameMenuAction.IMPORT_STATE, "Import Save State…", section = "Save States (.svs / .state)"))
-    add(GameMenuEntry(GameMenuAction.EXPORT_STATE, "Export Save State…", enabled = info?.latestState != null))
-    add(GameMenuEntry(GameMenuAction.VIEW_STATES, "View Save States…"))
-    add(GameMenuEntry(GameMenuAction.SHARE_ROM, "Share ROM…", dividerBefore = true))
-    add(GameMenuEntry(GameMenuAction.DELETE, "Delete"))
+fun gameMenuEntries(
+    isFavorite: Boolean,
+    info: RomMenuInfo?,
+    strings: DeltaStrings = DeltaI18n.currentStrings(),
+): List<GameMenuEntry> = buildList {
+    add(GameMenuEntry(GameMenuAction.PLAY, strings[StrKey.MENU_PLAY]))
+    if (info?.latestAutoStateId != null) add(GameMenuEntry(GameMenuAction.RESUME_AUTO_SAVE, strings[StrKey.MENU_RESUME_AUTO_SAVE]))
+    add(
+        GameMenuEntry(
+            GameMenuAction.TOGGLE_FAVORITE,
+            strings[if (isFavorite) StrKey.MENU_REMOVE_FROM_FAVORITES else StrKey.MENU_ADD_TO_FAVORITES],
+        ),
+    )
+    add(GameMenuEntry(GameMenuAction.RENAME, strings[StrKey.MENU_RENAME]))
+    add(GameMenuEntry(GameMenuAction.FETCH_COVER, strings[StrKey.MENU_FETCH_COVER], section = strings[StrKey.MENU_SECTION_COVER_ARTWORK]))
+    add(GameMenuEntry(GameMenuAction.CHANGE_COVER, strings[StrKey.MENU_CHANGE_COVER]))
+    add(GameMenuEntry(GameMenuAction.RESET_COVER, strings[StrKey.MENU_RESET_COVER]))
+    add(
+        GameMenuEntry(
+            GameMenuAction.IMPORT_SAVE,
+            strings[StrKey.MENU_IMPORT_SAVE],
+            section = strings[StrKey.MENU_SECTION_GAME_SAVE],
+            dividerBefore = true,
+        ),
+    )
+    add(GameMenuEntry(GameMenuAction.EXPORT_SAVE, strings[StrKey.MENU_EXPORT_SAVE], enabled = info?.hasSaveRam == true))
+    add(GameMenuEntry(GameMenuAction.IMPORT_STATE, strings[StrKey.MENU_IMPORT_STATE], section = strings[StrKey.MENU_SECTION_SAVE_STATES]))
+    add(GameMenuEntry(GameMenuAction.EXPORT_STATE, strings[StrKey.MENU_EXPORT_STATE], enabled = info?.latestState != null))
+    add(GameMenuEntry(GameMenuAction.VIEW_STATES, strings[StrKey.MENU_VIEW_STATES]))
+    add(GameMenuEntry(GameMenuAction.SHARE_ROM, strings[StrKey.MENU_SHARE_ROM], dividerBefore = true))
+    add(GameMenuEntry(GameMenuAction.DELETE, strings[StrKey.MENU_DELETE]))
 }
 
 private val DestructiveRed = Color(0xFFFF453A)
@@ -99,13 +119,14 @@ fun GameContextMenu(
     onDismiss: () -> Unit,
     onAction: (GameMenuAction) -> Unit,
 ) {
+    val strings = LocalDeltaStrings.current
     DropdownMenu(
         expanded = expanded,
         onDismissRequest = onDismiss,
         shape = RoundedCornerShape(14.dp),
         containerColor = MenuBackground,
     ) {
-        for (entry in gameMenuEntries(isFavorite, info)) {
+        for (entry in gameMenuEntries(isFavorite, info, strings)) {
             if (entry.dividerBefore) HorizontalDivider(thickness = 6.dp, color = Color(0xFF1C1C1E))
             entry.section?.let {
                 Text(

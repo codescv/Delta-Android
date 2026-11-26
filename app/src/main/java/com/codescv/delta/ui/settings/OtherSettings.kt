@@ -64,6 +64,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.documentfile.provider.DocumentFile
 import com.codescv.delta.DeltaApplication
+import com.codescv.delta.i18n.DeltaI18n
+import com.codescv.delta.i18n.LocalDeltaStrings
+import com.codescv.delta.i18n.StrKey
+import com.codescv.delta.i18n.str
 import com.codescv.delta.model.GameSystem
 import com.codescv.delta.settings.AppPreferences
 import com.codescv.delta.sync.CancellationIOException
@@ -132,11 +136,12 @@ private fun LabeledRow(title: String, value: String, onClick: (() -> Unit)? = nu
 @Composable
 internal fun AppIconSettings(prefs: AppPreferences, nav: SettingsNav) {
     val context = LocalContext.current
+    val strings = LocalDeltaStrings.current
     val scope = rememberCoroutineScope()
     val selected = AppIcons.find(prefs.selectedAppIconName).imageName
     SettingsPage {
         AppIcons.bySection().forEach { (section, icons) ->
-            FormSection(header = section.title) {
+            FormSection(header = section.localizedTitle(strings)) {
                 icons.forEachIndexed { i, icon ->
                     if (i > 0) {
                         Box(Modifier.fillMaxWidth().padding(start = 72.dp).height(0.5.dp).background(DeltaColors.Separator))
@@ -146,7 +151,7 @@ internal fun AppIconSettings(prefs: AppPreferences, nav: SettingsNav) {
                         nav.update { it.copy(selectedAppIconName = icon.imageName) }
                         scope.launch {
                             withContext(Dispatchers.IO) { AppIcons.apply(context.applicationContext, icon.imageName) }
-                            nav.message(AppIcons.UPDATE_MESSAGE)
+                            nav.message(AppIcons.updateMessage(strings))
                         }
                     }
                 }
@@ -179,7 +184,7 @@ private fun AppIconRow(icon: DeltaAppIcon, selected: Boolean, onClick: () -> Uni
             icon.credit?.let { Text(it, style = DeltaType.Caption, color = DeltaColors.SystemGray) }
         }
         if (selected) {
-            Icon(Icons.Filled.CheckCircle, contentDescription = "Selected", tint = DeltaColors.Purple, modifier = Modifier.size(24.dp))
+            Icon(Icons.Filled.CheckCircle, contentDescription = str(StrKey.COMMON_SELECTED), tint = DeltaColors.Purple, modifier = Modifier.size(24.dp))
         }
     }
 }
@@ -189,6 +194,7 @@ private fun AppIconRow(icon: DeltaAppIcon, selected: Boolean, onClick: () -> Uni
 @Composable
 internal fun DeltaSyncSettings(prefs: AppPreferences, nav: SettingsNav) {
     val context = LocalContext.current
+    val strings = LocalDeltaStrings.current
     val scope = rememberCoroutineScope()
     val container = DeltaApplication.container
     val sync = container.sync
@@ -216,9 +222,9 @@ internal fun DeltaSyncSettings(prefs: AppPreferences, nav: SettingsNav) {
         if (syncState.pendingConflicts.isNotEmpty()) {
             val conflictCount = syncState.pendingConflicts.size
             val conflictTitle = if (conflictCount == 1) {
-                "1 save conflict needs review"
+                strings[StrKey.SYNC_CONFLICT_ONE]
             } else {
-                "$conflictCount save conflicts need review"
+                strings.format(StrKey.SYNC_CONFLICT_MANY, conflictCount)
             }
             FormSection {
                 Row(
@@ -252,7 +258,7 @@ internal fun DeltaSyncSettings(prefs: AppPreferences, nav: SettingsNav) {
                             color = Color.White,
                         )
                         Text(
-                            text = "Tap to resolve",
+                            text = str(StrKey.SYNC_TAP_TO_RESOLVE),
                             style = DeltaType.Caption,
                             color = DeltaColors.BadgeOrange,
                         )
@@ -286,9 +292,9 @@ internal fun DeltaSyncSettings(prefs: AppPreferences, nav: SettingsNav) {
                 Column(Modifier.weight(1f)) {
                     Text(
                         text = if (syncState.isSignedIn) {
-                            syncState.accountName.ifBlank { "Connected" }
+                            syncState.accountName.ifBlank { strings[StrKey.SYNC_CONNECTED] }
                         } else {
-                            "Not Connected"
+                            strings[StrKey.SYNC_NOT_CONNECTED]
                         },
                         style = DeltaType.Body,
                         fontWeight = FontWeight.SemiBold,
@@ -300,7 +306,7 @@ internal fun DeltaSyncSettings(prefs: AppPreferences, nav: SettingsNav) {
                         text = if (syncState.isSignedIn) {
                             syncState.accountEmail.ifBlank { "Google Drive" }
                         } else {
-                            "Sign in to sync saves across Android and iOS."
+                            strings[StrKey.SYNC_SIGN_IN_SUBTITLE]
                         },
                         style = DeltaType.Caption,
                         color = DeltaColors.SystemGray,
@@ -326,13 +332,13 @@ internal fun DeltaSyncSettings(prefs: AppPreferences, nav: SettingsNav) {
                         )
                         Spacer(Modifier.width(12.dp))
                         Text(
-                            "Complete sign-in in browser…",
+                            str(StrKey.SYNC_COMPLETE_IN_BROWSER),
                             style = DeltaType.Body,
                             color = DeltaColors.SystemGray,
                             modifier = Modifier.weight(1f),
                         )
                         Text(
-                            "Cancel",
+                            str(StrKey.COMMON_CANCEL),
                             style = DeltaType.Body,
                             color = DestructiveRed,
                             modifier = Modifier
@@ -343,30 +349,30 @@ internal fun DeltaSyncSettings(prefs: AppPreferences, nav: SettingsNav) {
                 }
                 syncState.isSignedIn -> {
                     ActionRow(
-                        title = "Sign Out",
+                        title = str(StrKey.SYNC_SIGN_OUT),
                         icon = Icons.AutoMirrored.Outlined.Logout,
                         color = DestructiveRed,
                         enabled = !syncState.isSyncing && syncState.resolvingConflictId == null,
                     ) {
                         scope.launch {
                             sync.signOut()
-                            nav.message("Signed out of Google Drive.")
+                            nav.message(strings[StrKey.SYNC_SIGNED_OUT_MSG])
                         }
                     }
                 }
                 else -> {
                     ActionRow(
-                        title = "Sign In with Google",
+                        title = str(StrKey.SYNC_SIGN_IN_GOOGLE),
                         icon = Icons.Outlined.Cloud,
                         color = DeltaColors.Purple,
                     ) {
                         val idToSave = clientIdInput.trim()
                         if (idToSave.isBlank()) {
-                            nav.message("Enter an Android OAuth Client ID below first.")
+                            nav.message(strings[StrKey.SYNC_ENTER_CLIENT_ID_FIRST])
                             return@ActionRow
                         }
                         if (GoogleOAuthFlow.deriveRedirectUriOrNull(idToSave) == null) {
-                            nav.message("Client ID must end with .apps.googleusercontent.com.")
+                            nav.message(strings[StrKey.SYNC_CLIENT_ID_SUFFIX_ERR])
                             return@ActionRow
                         }
                         // Run in process-wide ioScope so Activity recreation while the browser is open
@@ -380,16 +386,16 @@ internal fun DeltaSyncSettings(prefs: AppPreferences, nav: SettingsNav) {
                                     try {
                                         context.applicationContext.startActivity(intent)
                                     } catch (e: ActivityNotFoundException) {
-                                        throw IOException("No browser app found to complete Google sign-in.", e)
+                                        throw IOException(DeltaI18n.tr(StrKey.SYNC_NO_BROWSER_ERR), e)
                                     }
                                 }
                             }.onSuccess { info ->
                                 val label = info.email.ifBlank { info.displayName.ifBlank { "Google Drive" } }
-                                withContext(Dispatchers.Main) { nav.message("Connected to $label.") }
+                                withContext(Dispatchers.Main) { nav.message(DeltaI18n.tr(StrKey.SYNC_CONNECTED_TO, label)) }
                             }.onFailure { err ->
                                 if (err !is CancellationIOException) {
                                     withContext(Dispatchers.Main) {
-                                        nav.message(err.message ?: "Google sign-in failed.")
+                                        nav.message(err.message ?: DeltaI18n.tr(StrKey.SYNC_SIGN_IN_FAILED))
                                     }
                                 }
                             }
@@ -414,15 +420,15 @@ internal fun DeltaSyncSettings(prefs: AppPreferences, nav: SettingsNav) {
         val redirectPreview = GoogleOAuthFlow.deriveRedirectUriOrNull(clientIdInput)
             ?: "com.googleusercontent.apps.<client-id-prefix>:/oauth2redirect"
         FormSection(
-            header = "GCP OAuth Setup",
-            footer = "Redirect URI: $redirectPreview — uses Android OAuth PKCE (no client secret required). Create both the Android and iOS OAuth clients in the same GCP project so both devices share the Delta Sync folder.",
+            header = str(StrKey.SYNC_GCP_OAUTH_HEADER),
+            footer = str(StrKey.SYNC_GCP_OAUTH_FOOTER, redirectPreview),
         ) {
             Column(
                 Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 10.dp),
             ) {
-                Text("OAuth Client ID (Android)", style = DeltaType.Caption, color = DeltaColors.SystemGray)
+                Text(str(StrKey.SYNC_OAUTH_CLIENT_ID_LABEL), style = DeltaType.Caption, color = DeltaColors.SystemGray)
                 Spacer(Modifier.height(4.dp))
                 Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterStart) {
                     if (clientIdInput.isEmpty()) {
@@ -454,7 +460,7 @@ internal fun DeltaSyncSettings(prefs: AppPreferences, nav: SettingsNav) {
                 if (syncState.isSignedIn) {
                     Spacer(Modifier.height(4.dp))
                     Text(
-                        "Sign out to change the Client ID.",
+                        str(StrKey.SYNC_SIGN_OUT_TO_CHANGE_ID),
                         style = DeltaType.Caption,
                         color = DeltaColors.SystemGray,
                     )
@@ -465,8 +471,8 @@ internal fun DeltaSyncSettings(prefs: AppPreferences, nav: SettingsNav) {
         // 3. Sync Controls (visible when connected)
         if (syncState.isSignedIn) {
             FormSection(
-                header = "Sync Controls",
-                footer = "Saves are stored under My Drive › Delta Sync › games/ and shared with Delta on iOS.",
+                header = str(StrKey.SYNC_CONTROLS_HEADER),
+                footer = str(StrKey.SYNC_CONTROLS_FOOTER),
             ) {
                 Row(
                     Modifier
@@ -475,7 +481,7 @@ internal fun DeltaSyncSettings(prefs: AppPreferences, nav: SettingsNav) {
                         .clickable(enabled = !syncState.isSyncing && syncState.resolvingConflictId == null) {
                             scope.launch {
                                 val res = sync.syncNow()
-                                nav.message(res.summaryText())
+                                nav.message(res.summaryText(DeltaI18n.currentStrings()))
                             }
                         }
                         .padding(horizontal = 16.dp, vertical = 8.dp),
@@ -498,9 +504,9 @@ internal fun DeltaSyncSettings(prefs: AppPreferences, nav: SettingsNav) {
                     Spacer(Modifier.width(14.dp))
                     Text(
                         text = if (syncState.isSyncing) {
-                            syncState.progressMessage ?: "Syncing…"
+                            syncState.progressMessage ?: str(StrKey.SYNC_SYNCING)
                         } else {
-                            "Sync Now"
+                            str(StrKey.SYNC_NOW)
                         },
                         style = DeltaType.Body,
                         color = if (syncState.isSyncing) DeltaColors.SystemGray else DeltaColors.Purple,
@@ -519,22 +525,24 @@ internal fun DeltaSyncSettings(prefs: AppPreferences, nav: SettingsNav) {
                     ) {
                         if (lastResult != null) {
                             val summary = buildString {
-                                append(lastResult.summaryText())
+                                append(lastResult.summaryText(strings))
                                 if (lastResult.conflicts > 0 && lastResult.pendingConflicts.isEmpty()) {
-                                    append(" · ${lastResult.conflicts} conflict(s)")
+                                    append(" · ")
+                                    append(strings.format(StrKey.SYNC_CONFLICT_COUNT_INLINE, lastResult.conflicts))
                                 }
                                 if (lastResult.skippedRunningGames > 0) {
-                                    append(" · ${lastResult.skippedRunningGames} running skipped")
+                                    append(" · ")
+                                    append(strings.format(StrKey.SYNC_RUNNING_SKIPPED, lastResult.skippedRunningGames))
                                 }
                             }
                             Text(summary, style = DeltaType.Caption, color = Color.White)
                         }
                         if (lastSyncedAt > 0L) {
-                            val formatted = remember(lastSyncedAt) {
-                                DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT)
+                            val formatted = remember(lastSyncedAt, strings.language) {
+                                DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT, strings.language.locale)
                                     .format(Date(lastSyncedAt))
                             }
-                            Text("Last synced $formatted", style = DeltaType.Caption, color = DeltaColors.SystemGray)
+                            Text(str(StrKey.SYNC_LAST_SYNCED, formatted), style = DeltaType.Caption, color = DeltaColors.SystemGray)
                         }
                         if (lastError != null) {
                             Spacer(Modifier.height(2.dp))
@@ -545,26 +553,26 @@ internal fun DeltaSyncSettings(prefs: AppPreferences, nav: SettingsNav) {
 
                 FormDivider()
                 FormToggleRow(
-                    title = "Auto-Sync",
+                    title = str(StrKey.SYNC_AUTO_SYNC),
                     checked = prefs.syncAutoEnabled,
                     onCheckedChange = { v -> nav.update { it.copy(syncAutoEnabled = v) } },
                 )
                 FormDivider()
                 FormToggleRow(
-                    title = "Sync Battery Saves (.srm)",
+                    title = str(StrKey.SYNC_BATTERY_SAVES),
                     checked = prefs.syncBatterySaves,
                     onCheckedChange = { v -> nav.update { it.copy(syncBatterySaves = v) } },
                 )
                 FormDivider()
                 FormToggleRow(
-                    title = "Sync Save States (.svs)",
+                    title = str(StrKey.SYNC_SAVE_STATES),
                     checked = prefs.syncSaveStates,
                     onCheckedChange = { v -> nav.update { it.copy(syncSaveStates = v) } },
                 )
                 FormDivider()
                 PickerRow(
-                    title = "Conflict Resolution",
-                    options = ConflictPolicy.entries.map { it to it.title },
+                    title = str(StrKey.SYNC_CONFLICT_RESOLUTION),
+                    options = ConflictPolicy.entries.map { it to it.localizedTitle(strings) },
                     selected = ConflictPolicy.fromRaw(prefs.syncConflictPolicy),
                     onSelect = { policy -> nav.update { it.copy(syncConflictPolicy = policy.raw) } },
                 )
@@ -576,10 +584,10 @@ internal fun DeltaSyncSettings(prefs: AppPreferences, nav: SettingsNav) {
 @Composable
 internal fun RetroAchievementsSettings(prefs: AppPreferences, nav: SettingsNav) {
     SettingsPage {
-        FormSection(header = "Account") {
+        FormSection(header = str(StrKey.RA_ACCOUNT_HEADER)) {
             Box(Modifier.fillMaxWidth().heightIn(min = 52.dp).padding(horizontal = 16.dp), contentAlignment = Alignment.CenterStart) {
                 if (prefs.retroAchievementsUsername.isEmpty()) {
-                    Text("RetroAchievements Username", style = DeltaType.Body, color = Color(0xFF5A5A5F))
+                    Text(str(StrKey.RA_USERNAME_PLACEHOLDER), style = DeltaType.Body, color = Color(0xFF5A5A5F))
                 }
                 BasicTextField(
                     value = prefs.retroAchievementsUsername,
@@ -596,8 +604,8 @@ internal fun RetroAchievementsSettings(prefs: AppPreferences, nav: SettingsNav) 
                 )
             }
         }
-        FormSection(footer = "Hardcore mode disables save states, cheats and fast forward while earning achievements.") {
-            FormToggleRow("Hardcore Mode", prefs.retroAchievementsHardcore, { v -> nav.update { it.copy(retroAchievementsHardcore = v) } })
+        FormSection(footer = str(StrKey.RA_HARDCORE_FOOTER)) {
+            FormToggleRow(str(StrKey.RA_HARDCORE_MODE), prefs.retroAchievementsHardcore, { v -> nav.update { it.copy(retroAchievementsHardcore = v) } })
         }
     }
 }
@@ -607,8 +615,8 @@ internal fun RetroAchievementsSettings(prefs: AppPreferences, nav: SettingsNav) 
 @Composable
 internal fun LilSettings(prefs: AppPreferences, nav: SettingsNav) {
     SettingsPage {
-        FormSection(footer = "Automatically resume from the auto save when launching a game.") {
-            FormToggleRow("Resume Where I Left Off", prefs.autoResume, { v -> nav.update { it.copy(autoResume = v) } })
+        FormSection(footer = str(StrKey.LIL_RESUME_FOOTER)) {
+            FormToggleRow(str(StrKey.LIL_RESUME_TITLE), prefs.autoResume, { v -> nav.update { it.copy(autoResume = v) } })
         }
     }
 }
@@ -619,17 +627,17 @@ internal fun AdvancedSettings(nav: SettingsNav) {
     val library = DeltaApplication.container.library
     val state by library.state.collectAsState()
     SettingsPage {
-        FormSection(header = "Storage") {
-            FormRow(title = "Game Library", chevron = true, onClick = { nav.push(SettingsRoute.GameLibrary) })
+        FormSection(header = str(StrKey.ADV_STORAGE_HEADER)) {
+            FormRow(title = str(StrKey.SETTINGS_GAME_LIBRARY), chevron = true, onClick = { nav.push(SettingsRoute.GameLibrary) })
             FormDivider()
-            FormRow(title = "ROMs Directory", subtitle = library.romsDirectory.absolutePath)
+            FormRow(title = str(StrKey.ADV_ROMS_DIRECTORY), subtitle = library.romsDirectory.absolutePath)
             FormDivider()
-            FormRow(title = "Total Games", value = state.entries.size.toString())
+            FormRow(title = str(StrKey.ADV_TOTAL_GAMES), value = state.entries.size.toString())
         }
-        FormSection(header = "About") {
-            FormRow(title = "Delta Version", value = SettingsData.VERSION_STRING)
+        FormSection(header = str(StrKey.ADV_ABOUT_HEADER)) {
+            FormRow(title = str(StrKey.ADV_DELTA_VERSION), value = SettingsData.VERSION_STRING)
             FormDivider()
-            LabeledRow("GitHub Fork", SettingsData.GITHUB_FORK) {
+            LabeledRow(str(StrKey.ADV_GITHUB_FORK), SettingsData.GITHUB_FORK) {
                 runCatching {
                     context.startActivity(
                         Intent(Intent.ACTION_VIEW, Uri.parse("https://" + SettingsData.GITHUB_FORK)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
@@ -645,6 +653,7 @@ internal fun AdvancedSettings(nav: SettingsNav) {
 @Composable
 internal fun GameLibrarySettings(prefs: AppPreferences, nav: SettingsNav) {
     val context = LocalContext.current
+    val strings = LocalDeltaStrings.current
     val scope = rememberCoroutineScope()
     val library = DeltaApplication.container.library
     val state by library.state.collectAsState()
@@ -661,36 +670,36 @@ internal fun GameLibrarySettings(prefs: AppPreferences, nav: SettingsNav) {
     }
 
     val filesPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
-        if (uris.isNotEmpty()) run("Importing…") { importUris(context, uris) }
+        if (uris.isNotEmpty()) run(strings[StrKey.GL_IMPORTING]) { importUris(context, uris) }
     }
     val folderPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
-        if (uri != null) run("Importing…") { importFolder(context, uri) }
+        if (uri != null) run(strings[StrKey.GL_IMPORTING]) { importFolder(context, uri) }
     }
     val exporter = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) { uri ->
-        if (uri != null) run("Exporting…") { exportSaves(context, uri) }
+        if (uri != null) run(strings[StrKey.GL_EXPORTING]) { exportSaves(context, uri) }
     }
 
     SettingsPage {
-        FormSection(header = "Box Art", footer = "Automatically download cover artwork for newly imported games.") {
-            FormToggleRow("Auto-Fetch Box Art", prefs.autoFetchBoxArt, { v -> nav.update { it.copy(autoFetchBoxArt = v) } })
+        FormSection(header = str(StrKey.GL_BOX_ART_HEADER), footer = str(StrKey.GL_BOX_ART_FOOTER)) {
+            FormToggleRow(str(StrKey.GL_AUTO_FETCH_BOX_ART), prefs.autoFetchBoxArt, { v -> nav.update { it.copy(autoFetchBoxArt = v) } })
             FormDivider()
-            ActionRow("Re-scan Artwork", Icons.Outlined.Image, enabled = busy == null) {
-                run("Fetching artwork…") { rescanArtwork() }
+            ActionRow(str(StrKey.GL_RESCAN_ARTWORK), Icons.Outlined.Image, enabled = busy == null) {
+                run(strings[StrKey.GL_FETCHING_ARTWORK]) { rescanArtwork() }
             }
         }
-        FormSection(header = "Import") {
-            ActionRow("Import Files…", Icons.Outlined.NoteAdd, enabled = busy == null) { filesPicker.launch(arrayOf("*/*")) }
+        FormSection(header = str(StrKey.GL_IMPORT_HEADER)) {
+            ActionRow(str(StrKey.GL_IMPORT_FILES), Icons.Outlined.NoteAdd, enabled = busy == null) { filesPicker.launch(arrayOf("*/*")) }
             FormDivider()
-            ActionRow("Import Folder…", Icons.Outlined.CreateNewFolder, enabled = busy == null) { folderPicker.launch(null) }
+            ActionRow(str(StrKey.GL_IMPORT_FOLDER), Icons.Outlined.CreateNewFolder, enabled = busy == null) { folderPicker.launch(null) }
         }
-        FormSection(header = "Export", footer = "Exports every game save (.srm) and save state into a single .zip file.") {
-            ActionRow("Export All Saves (.zip)", Icons.Outlined.Archive, enabled = busy == null) { exporter.launch("Delta Saves.zip") }
+        FormSection(header = str(StrKey.GL_EXPORT_HEADER), footer = str(StrKey.GL_EXPORT_FOOTER)) {
+            ActionRow(str(StrKey.GL_EXPORT_ALL_SAVES), Icons.Outlined.Archive, enabled = busy == null) { exporter.launch("Delta Saves.zip") }
         }
         busy?.let { FormSection { CaptionRow(it) } }
-        FormSection(header = "Storage") {
-            FormRow(title = "ROMs Directory", subtitle = library.romsDirectory.absolutePath)
+        FormSection(header = str(StrKey.ADV_STORAGE_HEADER)) {
+            FormRow(title = str(StrKey.ADV_ROMS_DIRECTORY), subtitle = library.romsDirectory.absolutePath)
             FormDivider()
-            FormRow(title = "Total Games", value = state.entries.size.toString())
+            FormRow(title = str(StrKey.ADV_TOTAL_GAMES), value = state.entries.size.toString())
         }
     }
 }
@@ -712,8 +721,11 @@ private fun importOne(context: Context, uri: Uri, name: String): Int {
 }
 
 private fun importSummary(imported: Int, failures: List<String>): String = buildString {
-    append(if (imported == 1) "Imported 1 game." else "Imported $imported games.")
-    if (failures.isNotEmpty()) append(" Could not import: ").append(failures.take(3).joinToString())
+    append(if (imported == 1) DeltaI18n.tr(StrKey.GL_IMPORTED_ONE) else DeltaI18n.tr(StrKey.GL_IMPORTED_MANY, imported))
+    if (failures.isNotEmpty()) {
+        append(" ")
+        append(DeltaI18n.tr(StrKey.GL_COULD_NOT_IMPORT, failures.take(3).joinToString()))
+    }
     if (failures.size > 3) append(" …")
 }
 
@@ -728,7 +740,7 @@ private fun importUris(context: Context, uris: List<Uri>): String {
 }
 
 private fun importFolder(context: Context, tree: Uri): String {
-    val root = DocumentFile.fromTreeUri(context, tree) ?: return "Unable to open the selected folder."
+    val root = DocumentFile.fromTreeUri(context, tree) ?: return DeltaI18n.tr(StrKey.GL_UNABLE_OPEN_FOLDER)
     var count = 0
     val failures = mutableListOf<String>()
     fun walk(dir: DocumentFile, depth: Int) {
@@ -754,7 +766,11 @@ private fun rescanArtwork(): String {
         if (runCatching { library.covers.fetchCoverIfNeeded(rom, force = true) }.getOrNull() != null) fetched++
     }
     library.bumpCovers()
-    return if (missing.isEmpty()) "All games already have artwork." else "Fetched artwork for $fetched of ${missing.size} games."
+    return if (missing.isEmpty()) {
+        DeltaI18n.tr(StrKey.GL_ALL_ARTWORK_PRESENT)
+    } else {
+        DeltaI18n.tr(StrKey.GL_FETCHED_ARTWORK_COUNT, fetched, missing.size)
+    }
 }
 
 private fun exportSaves(context: Context, target: Uri): String {
@@ -773,19 +789,20 @@ private fun exportSaves(context: Context, target: Uri): String {
                 }
             }
         }
-    } ?: return "Unable to create the export file."
-    return if (files == 1) "Exported 1 file." else "Exported $files files."
+    } ?: return DeltaI18n.tr(StrKey.GL_UNABLE_CREATE_EXPORT)
+    return if (files == 1) DeltaI18n.tr(StrKey.GL_EXPORTED_ONE) else DeltaI18n.tr(StrKey.GL_EXPORTED_MANY, files)
 }
 
 // ----------------------------------------------------------------------------- Experimental
 
 @Composable
 internal fun ExperimentalFeaturesSettings(prefs: AppPreferences, nav: SettingsNav) {
+    val strings = LocalDeltaStrings.current
     SettingsPage {
-        FormSection(header = "Experimental Features", footer = "Experimental features may be unstable or incomplete.") {
+        FormSection(header = str(StrKey.SETTINGS_EXPERIMENTAL_FEATURES), footer = str(StrKey.EXP_FOOTER)) {
             prefs.experimentalFeatures.forEachIndexed { i, feature ->
                 if (i > 0) FormDivider()
-                val p = SettingsData.present(feature)
+                val p = SettingsData.present(feature, strings)
                 TwoLineRow(
                     title = p.name,
                     detail = p.summary,
@@ -800,9 +817,10 @@ internal fun ExperimentalFeaturesSettings(prefs: AppPreferences, nav: SettingsNa
 @Composable
 internal fun ExperimentalFeatureDetail(featureKey: String, prefs: AppPreferences, nav: SettingsNav) {
     val feature = prefs.experimentalFeatures.firstOrNull { it.key == featureKey } ?: return
-    val p = SettingsData.present(feature)
+    val strings = LocalDeltaStrings.current
+    val p = SettingsData.present(feature, strings)
     SettingsPage {
-        FormSection(footer = SettingsData.detailFooter(feature)) {
+        FormSection(footer = SettingsData.detailFooter(feature, strings)) {
             Row(
                 Modifier
                     .fillMaxWidth()
@@ -816,14 +834,14 @@ internal fun ExperimentalFeatureDetail(featureKey: String, prefs: AppPreferences
             }
         }
         if (feature.isEnabled && feature.options.isNotEmpty()) {
-            FormSection(header = "Options") {
+            FormSection(header = str(StrKey.COMMON_OPTIONS)) {
                 feature.options.keys.sorted().forEachIndexed { i, key ->
                     if (i > 0) FormDivider()
                     val value = feature.options[key].orEmpty()
                     val next = SettingsData.nextOptionValue(key, value)
                     FormRow(
-                        title = key,
-                        value = value,
+                        title = SettingsData.experimentalOptionLabel(key, strings),
+                        value = SettingsData.experimentalOptionValue(value, strings),
                         onClick = next?.let { n -> { nav.store.setExperimentalOption(feature.key, key, n) } },
                     )
                 }
@@ -836,9 +854,10 @@ internal fun ExperimentalFeatureDetail(featureKey: String, prefs: AppPreferences
 
 @Composable
 internal fun ContributorsSettings() {
+    val strings = LocalDeltaStrings.current
     SettingsPage {
         FormSection {
-            SettingsData.contributors.forEachIndexed { i, (name, role) ->
+            SettingsData.contributors(strings).forEachIndexed { i, (name, role) ->
                 if (i > 0) FormDivider()
                 TwoLineRow(name, role)
             }

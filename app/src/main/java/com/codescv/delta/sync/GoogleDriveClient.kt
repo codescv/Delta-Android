@@ -1,5 +1,7 @@
 package com.codescv.delta.sync
 
+import com.codescv.delta.i18n.DeltaI18n
+import com.codescv.delta.i18n.StrKey
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
@@ -361,7 +363,7 @@ class HttpGoogleDriveClient(
                     continue
                 }
                 throw GDriveAuthException(
-                    message = "Google Drive sign-in expired — sign in again",
+                    message = DeltaI18n.tr(StrKey.OAUTH_ERR_SIGNIN_EXPIRED),
                     needsInteraction = true,
                 )
             }
@@ -485,7 +487,7 @@ class HttpGoogleDriveClient(
             return DriveFileNotFoundException("Google Drive item not found: ${redactSecrets(err.message)}")
         }
         if (status == 403 && err.reason == "storageQuotaExceeded") {
-            return DriveApiException(status = 403, reason = err.reason, message = "Google Drive storage is full")
+            return DriveApiException(status = 403, reason = err.reason, message = DeltaI18n.tr(StrKey.SYNC_ERR_DRIVE_STORAGE_FULL))
         }
         val reasonPrefix = err.reason?.takeIf { it.isNotBlank() }?.let { "$it " } ?: ""
         return DriveApiException(

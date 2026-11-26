@@ -11,6 +11,9 @@ import android.os.Build
 import android.provider.OpenableColumns
 import androidx.core.content.FileProvider
 import com.codescv.delta.AppContainer
+import com.codescv.delta.i18n.DeltaI18n
+import com.codescv.delta.i18n.StrKey
+import com.codescv.delta.i18n.findActivity
 import com.codescv.delta.library.RomEntry
 import com.codescv.delta.model.GameSystem
 import com.codescv.delta.saves.SaveFileManager
@@ -96,7 +99,7 @@ class LibraryController(
         val name = displayName(uri) ?: "skin.deltaskin"
         val skin = open(uri).use { container.skins.importDeltaSkin(it, name, null) }
         val system = GameSystem.entries.firstOrNull { it.skinSystem == skin.skin.skinSystem }?.displayName ?: skin.skin.skinSystem
-        toast("Imported ${skin.skin.name} for $system")
+        toast(DeltaI18n.tr(StrKey.LIB_IMPORTED_SKIN_FOR_SYSTEM, skin.skin.name, system))
     }
 
     fun linkFolder(uri: Uri): Job = background {
@@ -155,14 +158,14 @@ class LibraryController(
     // Cover artwork ---------------------------------------------------------------------------
 
     fun fetchCover(rom: RomEntry): Job {
-        onToast("Fetching cover for ${rom.title}…")
+        onToast(DeltaI18n.tr(StrKey.LIB_FETCHING_COVER, rom.title))
         return background { library.fetchCovers(listOf(rom), force = true) }
     }
 
     fun changeCover(rom: RomEntry, uri: Uri): Job = background {
         val png = normalizedCoverPng(uri)
         library.storeCustomCover(png, rom)
-        toast("Cover updated for ${rom.title}")
+        toast(DeltaI18n.tr(StrKey.LIB_COVER_UPDATED, rom.title))
     }
 
     fun resetCover(rom: RomEntry): Job = background {
@@ -175,25 +178,25 @@ class LibraryController(
     fun importSave(rom: RomEntry, uri: Uri): Job = background {
         val data = readBytes(uri, SaveFileManager.MAX_SAVE_BYTES + 1)
         saves.importSaveRam(data, rom)
-        toast("Save imported for ${rom.title}")
+        toast(DeltaI18n.tr(StrKey.LIB_SAVE_IMPORTED, rom.title))
     }
 
     fun exportSave(rom: RomEntry, uri: Uri): Job = background {
         val data = saves.exportSaveRam(rom)
         write(uri, data)
-        toast("Exported")
+        toast(DeltaI18n.tr(StrKey.LIB_EXPORTED))
     }
 
     fun importState(rom: RomEntry, uri: Uri): Job = background {
         val data = readBytes(uri, SaveFileManager.MAX_SAVE_BYTES * 8 + 1)
         val info = saves.importState(data, rom, rom.system.coreId)
-        toast("Save State imported into ${info.name ?: "Quick Save"}")
+        toast(DeltaI18n.tr(StrKey.LIB_STATE_IMPORTED_INTO, info.name ?: DeltaI18n.tr(StrKey.SAVES_QUICK_SAVE)))
     }
 
     fun exportState(rom: RomEntry, stateId: String, uri: Uri): Job = background {
         val data = saves.exportState(rom, stateId)
         write(uri, data)
-        toast("Exported")
+        toast(DeltaI18n.tr(StrKey.LIB_EXPORTED))
     }
 
     // Share -----------------------------------------------------------------------------------
@@ -208,8 +211,8 @@ class LibraryController(
                 clipData = ClipData.newRawUri(rom.fileName, uri)
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             }
-            val chooser = Intent.createChooser(send, "Share ROM…").apply {
-                if (context !is android.app.Activity) addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            val chooser = Intent.createChooser(send, DeltaI18n.tr(StrKey.LIB_SHARE_ROM)).apply {
+                if (context.findActivity() == null) addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
             context.startActivity(chooser)
         } catch (e: Exception) {
@@ -220,7 +223,7 @@ class LibraryController(
     // SAF helpers -----------------------------------------------------------------------------
 
     private fun open(uri: Uri): InputStream =
-        resolver.openInputStream(uri) ?: throw java.io.FileNotFoundException("Unable to open $uri")
+        resolver.openInputStream(uri) ?: throw java.io.FileNotFoundException(DeltaI18n.tr(StrKey.LIB_UNABLE_TO_OPEN_URI, uri.toString()))
 
     private fun displayName(uri: Uri): String? = runCatching {
         resolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { c ->
@@ -242,7 +245,7 @@ class LibraryController(
 
     private fun write(uri: Uri, data: ByteArray) {
         val out = resolver.openOutputStream(uri, "wt") ?: resolver.openOutputStream(uri)
-            ?: throw java.io.FileNotFoundException("Unable to write $uri")
+            ?: throw java.io.FileNotFoundException(DeltaI18n.tr(StrKey.LIB_UNABLE_TO_WRITE_URI, uri.toString()))
         out.use { it.write(data) }
     }
 
@@ -261,7 +264,7 @@ class LibraryController(
             var sample = 1
             while (max(bounds.outWidth, bounds.outHeight) / (sample * 2) >= COVER_MAX_PX) sample *= 2
             val decoded = open(uri).use { BitmapFactory.decodeStream(it, null, BitmapFactory.Options().apply { inSampleSize = sample }) }
-                ?: throw IllegalArgumentException("The selected image could not be read.")
+                ?: throw IllegalArgumentException(DeltaI18n.tr(StrKey.LIB_IMAGE_UNREADABLE))
             val scale = COVER_MAX_PX.toFloat() / max(decoded.width, decoded.height)
             if (scale < 1f) Bitmap.createScaledBitmap(decoded, (decoded.width * scale).roundToInt(), (decoded.height * scale).roundToInt(), true) else decoded
         }

@@ -44,6 +44,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.codescv.delta.i18n.StrKey
+import com.codescv.delta.i18n.str
 import com.codescv.delta.ui.components.FormRow
 import com.codescv.delta.ui.theme.DeltaColors
 import com.codescv.delta.ui.theme.DeltaType
@@ -54,6 +56,7 @@ internal val DestructiveRed = Color(0xFFFF453A)
 /** Settings `SettingsCloseButton`: 36 dp glass circle with a 15 sp semibold `xmark`. */
 @Composable
 internal fun SettingsCloseButton(onClick: () -> Unit) {
+    val closeDesc = str(StrKey.COMMON_CLOSE)
     Box(
         Modifier
             .size(36.dp)
@@ -61,7 +64,7 @@ internal fun SettingsCloseButton(onClick: () -> Unit) {
             .background(Color(0x33FFFFFF))
             .border(0.5.dp, Color(0x1AFFFFFF), CircleShape)
             .clickable(onClick = onClick)
-            .semantics { contentDescription = "Close" },
+            .semantics { contentDescription = closeDesc },
         contentAlignment = Alignment.Center,
     ) {
         Icon(Icons.Filled.Close, contentDescription = null, tint = Color.White, modifier = Modifier.size(19.dp))
@@ -71,6 +74,7 @@ internal fun SettingsCloseButton(onClick: () -> Unit) {
 /** Inline navigation bar of a pushed page: `‹ <back title>` + centred 17 sp semibold title. */
 @Composable
 internal fun SettingsNavBar(title: String, backTitle: String, onBack: () -> Unit) {
+    val backDesc = str(StrKey.COMMON_BACK)
     Box(Modifier.fillMaxWidth().height(52.dp)) {
         Row(
             Modifier
@@ -78,7 +82,7 @@ internal fun SettingsNavBar(title: String, backTitle: String, onBack: () -> Unit
                 .clip(CircleShape)
                 .clickable(onClick = onBack)
                 .padding(start = 8.dp, end = 10.dp, top = 6.dp, bottom = 6.dp)
-                .semantics { contentDescription = "Back" },
+                .semantics { contentDescription = backDesc },
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Icon(

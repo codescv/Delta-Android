@@ -3,14 +3,25 @@ package com.codescv.delta.ui.settings
 import android.content.ComponentName
 import android.content.Context
 import android.content.pm.PackageManager
+import com.codescv.delta.i18n.DeltaI18n
+import com.codescv.delta.i18n.DeltaStrings
+import com.codescv.delta.i18n.StrKey
 
-/** `DeltaIconSection` (Patron sections renamed per design §12.7). */
+/** `DeltaIconSection` (sections renamed per design §12.7). */
 enum class DeltaIconSection(val title: String) {
     GLASS("Glass"),
     MODERN("Modern"),
     CLASSIC("Classic"),
     EXCLUSIVE("Exclusive"),
-    BUTTON_PACK("Button Pack"),
+    BUTTON_PACK("Button Pack");
+
+    fun localizedTitle(strings: DeltaStrings = DeltaI18n.currentStrings()): String = when (this) {
+        GLASS -> strings[StrKey.ICON_SECTION_GLASS]
+        MODERN -> strings[StrKey.ICON_SECTION_MODERN]
+        CLASSIC -> strings[StrKey.ICON_SECTION_CLASSIC]
+        EXCLUSIVE -> strings[StrKey.ICON_SECTION_EXCLUSIVE]
+        BUTTON_PACK -> strings[StrKey.ICON_SECTION_BUTTON_PACK]
+    }
 }
 
 /** One alternate launcher icon = one `<activity-alias>` named [aliasClassName]. */
@@ -33,6 +44,8 @@ object AppIcons {
     const val ALIAS_PREFIX = "com.codescv.delta.icon."
     const val DEFAULT_ICON = "ModernIcon"
     const val UPDATE_MESSAGE = "Icon will update on your launcher shortly"
+
+    fun updateMessage(strings: DeltaStrings = DeltaI18n.currentStrings()): String = strings[StrKey.ICON_UPDATE_MESSAGE]
 
     private const val MANTIA = "Louie Mantia"
 

@@ -11,3 +11,4 @@ captures/
 *.apk
 !release/*.apk
 hostjni/build/
+.kotlin/
